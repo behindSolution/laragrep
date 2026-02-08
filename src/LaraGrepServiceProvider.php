@@ -3,9 +3,17 @@
 namespace LaraGrep;
 
 use Illuminate\Support\ServiceProvider;
-use LaraGrep\Metadata\SchemaMetadataLoader;
-use LaraGrep\Services\ConversationStore;
-use LaraGrep\Services\LaraGrepQueryService;
+use LaraGrep\AiClients\AnthropicClient;
+use LaraGrep\AiClients\OpenAiClient;
+use LaraGrep\Contracts\AiClientInterface;
+use LaraGrep\Contracts\ConversationStoreInterface;
+use LaraGrep\Contracts\MetadataLoaderInterface;
+use LaraGrep\Conversation\DatabaseConversationStore;
+use LaraGrep\Metadata\MysqlSchemaLoader;
+use LaraGrep\Prompt\PromptBuilder;
+use LaraGrep\Prompt\ResponseParser;
+use LaraGrep\Query\QueryExecutor;
+use LaraGrep\Query\QueryValidator;
 
 class LaraGrepServiceProvider extends ServiceProvider
 {
@@ -13,80 +21,90 @@ class LaraGrepServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/laragrep.php', 'laragrep');
 
-        $this->app->singleton(SchemaMetadataLoader::class, function ($app) {
+        $this->app->singleton(AiClientInterface::class, function ($app) {
             $config = $app['config']->get('laragrep', []);
-            $defaultContext = [];
+            $provider = strtolower((string) ($config['provider'] ?? 'openai'));
+            $apiKey = (string) ($config['api_key'] ?? '');
+            $model = (string) ($config['model'] ?? '');
+            $baseUrl = $config['base_url'] ?? null;
 
-            $contexts = $config['contexts'] ?? [];
+            return match ($provider) {
+                'anthropic' => new AnthropicClient(
+                    apiKey: $apiKey,
+                    model: $model ?: 'claude-sonnet-4-20250514',
+                    maxTokens: (int) ($config['max_tokens'] ?? 1024),
+                    baseUrl: is_string($baseUrl) && $baseUrl !== ''
+                        ? $baseUrl
+                        : 'https://api.anthropic.com/v1/messages',
+                    anthropicVersion: (string) ($config['anthropic_version'] ?? '2023-06-01'),
+                ),
+                default => new OpenAiClient(
+                    apiKey: $apiKey,
+                    model: $model ?: 'gpt-4o-mini',
+                    baseUrl: is_string($baseUrl) && $baseUrl !== ''
+                        ? $baseUrl
+                        : 'https://api.openai.com/v1/chat/completions',
+                ),
+            };
+        });
 
-            if (is_array($contexts)) {
-                if (isset($contexts['default']) && is_array($contexts['default'])) {
-                    $defaultContext = $contexts['default'];
-                } else {
-                    foreach ($contexts as $candidate) {
-                        if (is_array($candidate)) {
-                            $defaultContext = $candidate;
-                            break;
-                        }
-                    }
-                }
+        $this->app->singleton(MetadataLoaderInterface::class, function ($app) {
+            return new MysqlSchemaLoader($app['db']);
+        });
+
+        $this->app->singleton(ConversationStoreInterface::class, function ($app) {
+            $config = $app['config']->get('laragrep.conversation', []);
+
+            if (!is_array($config) || !($config['enabled'] ?? true)) {
+                return null;
             }
 
-            $connection = $defaultContext['connection'] ?? ($config['connection'] ?? null);
-            $excludeTables = $defaultContext['exclude_tables'] ?? ($config['exclude_tables'] ?? []);
+            $connectionName = $config['connection'] ?? null;
+            $connectionConfig = $this->getConnectionConfig($app, $connectionName);
 
-            if (is_string($excludeTables)) {
-                $excludeTables = array_map('trim', explode(',', $excludeTables));
+            if ($connectionConfig === null) {
+                return null;
             }
 
-            if (!is_array($excludeTables)) {
-                $excludeTables = [];
+            if (!$this->connectionSupportsConversations($app, $connectionConfig)) {
+                return null;
             }
 
-            $excludeTables = array_values(array_filter(
-                $excludeTables,
-                fn ($value) => $value !== null && $value !== ''
-            ));
+            $connection = $connectionName
+                ? $app['db']->connection($connectionName)
+                : $app['db']->connection();
 
-            return new SchemaMetadataLoader(
-                $app['db'],
+            return new DatabaseConversationStore(
                 $connection,
-                $excludeTables
+                (string) ($config['table'] ?? 'laragrep_conversations'),
+                (int) ($config['max_messages'] ?? 10),
+                (int) ($config['ttl_days'] ?? 10),
             );
         });
 
-        $this->app->singleton(LaraGrepQueryService::class, function ($app) {
+        $this->app->singleton(PromptBuilder::class);
+        $this->app->singleton(ResponseParser::class);
+        $this->app->singleton(QueryValidator::class);
+
+        $this->app->singleton(QueryExecutor::class, function ($app) {
+            $config = $app['config']->get('laragrep', []);
+            $defaultConnection = $config['contexts']['default']['connection'] ?? null;
+
+            return new QueryExecutor($defaultConnection);
+        });
+
+        $this->app->singleton(LaraGrep::class, function ($app) {
             $config = $app['config']->get('laragrep', []);
 
-            $conversationConfig = $config['conversation'] ?? [];
-            $conversationStore = null;
-
-            if (is_array($conversationConfig) && ($conversationConfig['enabled'] ?? true)) {
-                $connectionName = $conversationConfig['connection'] ?? null;
-                $table = (string) ($conversationConfig['table'] ?? 'laragrep_conversations');
-                $maxMessages = (int) ($conversationConfig['max_messages'] ?? 10);
-                $ttlDays = (int) ($conversationConfig['ttl_days'] ?? 10);
-
-                $connectionConfig = $this->getConnectionConfig($app, $connectionName);
-
-                if ($connectionConfig !== null && $this->connectionSupportsConversations($app, $connectionConfig)) {
-                    $connection = $connectionName
-                        ? $app['db']->connection($connectionName)
-                        : $app['db']->connection();
-
-                    $conversationStore = new ConversationStore(
-                        $connection,
-                        $table,
-                        $maxMessages,
-                        $ttlDays
-                    );
-                }
-            }
-
-            return new LaraGrepQueryService(
-                $app->make(SchemaMetadataLoader::class),
-                $config,
-                $conversationStore
+            return new LaraGrep(
+                aiClient: $app->make(AiClientInterface::class),
+                promptBuilder: $app->make(PromptBuilder::class),
+                responseParser: $app->make(ResponseParser::class),
+                queryExecutor: $app->make(QueryExecutor::class),
+                queryValidator: $app->make(QueryValidator::class),
+                metadataLoader: $app->make(MetadataLoaderInterface::class),
+                conversationStore: $app->make(ConversationStoreInterface::class),
+                config: $config,
             );
         });
     }
@@ -99,7 +117,6 @@ class LaraGrepServiceProvider extends ServiceProvider
 
         $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
     }
-
 
     private function getConnectionConfig($app, ?string $connectionName): ?array
     {

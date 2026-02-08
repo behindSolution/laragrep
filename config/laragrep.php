@@ -1,130 +1,148 @@
 <?php
 
 return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | AI Provider
+    |--------------------------------------------------------------------------
+    |
+    | Supported: "openai", "anthropic"
+    |
+    */
+
     'provider' => env('LARAGREP_PROVIDER', 'openai'),
-    'api_key' => env('LARAGREP_API_KEY', env('OPENAI_API_KEY', env('ANTHROPIC_API_KEY'))),
+
+    'api_key' => env('LARAGREP_API_KEY'),
+
     'base_url' => env('LARAGREP_BASE_URL'),
-    'model' => env('LARAGREP_MODEL', 'gpt-3.5-turbo'),
+
+    'model' => env('LARAGREP_MODEL', 'gpt-4o-mini'),
+
     'max_tokens' => (int) env('LARAGREP_MAX_TOKENS', 1024),
+
     'anthropic_version' => env('LARAGREP_ANTHROPIC_VERSION', '2023-06-01'),
-    'system_prompt' => env('LARAGREP_SYSTEM_PROMPT', 'You are a helpful assistant that translates natural language questions into safe Laravel Eloquent queries. Always respond with valid JSON describing the steps to execute.'),
-    'interpretation_prompt' => env('LARAGREP_INTERPRETATION_PROMPT', "You are an assistant that turns SQL query results into clear, business-oriented answers using the user's language."),
-    'user_language' => env('LARAGREP_USER_LANGUAGE', 'pt-BR'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Schema Loading Mode
+    |--------------------------------------------------------------------------
+    |
+    | Controls how table metadata is provided to the AI:
+    |
+    | "manual"  - Only use tables defined in the contexts below (default).
+    | "auto"    - Auto-load from information_schema (MySQL/MariaDB).
+    | "merged"  - Auto-load first, then overlay manual definitions on top.
+    |
+    */
+
+    'schema_mode' => env('LARAGREP_SCHEMA_MODE', 'manual'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Custom Prompts
+    |--------------------------------------------------------------------------
+    |
+    | Override the built-in system prompt or interpretation prompt.
+    | Leave null to use the defaults.
+    |
+    */
+
+    'system_prompt' => env('LARAGREP_SYSTEM_PROMPT'),
+
+    'interpretation_prompt' => env('LARAGREP_INTERPRETATION_PROMPT'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | User Language
+    |--------------------------------------------------------------------------
+    |
+    | ISO language code for AI responses (e.g., "en", "pt-BR", "es").
+    |
+    */
+
+    'user_language' => env('LARAGREP_USER_LANGUAGE', 'en'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Conversation Persistence
+    |--------------------------------------------------------------------------
+    |
+    | Enable multi-turn conversation support. When enabled, previous questions
+    | and answers are sent as context to the AI for follow-up questions.
+    |
+    */
+
     'conversation' => [
-        'enabled' => env('LARAGREP_CONVERSATION_ENABLED', true),
+        'enabled' => (bool) env('LARAGREP_CONVERSATION_ENABLED', true),
         'connection' => env('LARAGREP_CONVERSATION_CONNECTION', 'sqlite'),
         'table' => env('LARAGREP_CONVERSATION_TABLE', 'laragrep_conversations'),
         'max_messages' => (int) env('LARAGREP_CONVERSATION_MAX_MESSAGES', 10),
         'ttl_days' => (int) env('LARAGREP_CONVERSATION_TTL_DAYS', 10),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Contexts (Scopes)
+    |--------------------------------------------------------------------------
+    |
+    | Each context can override: connection, database, exclude_tables, tables,
+    | and schema_mode. The "default" context is used when no scope is specified.
+    |
+    | Select a context via the URL: POST /laragrep/{scope}
+    |
+    */
+
     'contexts' => [
         'default' => [
             'connection' => env('LARAGREP_CONNECTION'),
-            'exclude_tables' => array_values(array_filter(array_map('trim', explode(',', (string) env('LARAGREP_EXCLUDE_TABLES', ''))))),
+            'exclude_tables' => array_values(array_filter(
+                array_map('trim', explode(',', (string) env('LARAGREP_EXCLUDE_TABLES', '')))
+            )),
             'database' => [
-                'type' => env('LARAGREP_DATABASE_TYPE', 'MariaDB 10.6'),
+                'type' => env('LARAGREP_DATABASE_TYPE', ''),
                 'name' => env('LARAGREP_DATABASE_NAME', env('DB_DATABASE', '')),
             ],
             'tables' => [
-                [
-                    'name' => 'users',
-                    'description' => 'Example table containing registered application users.',
-                    'columns' => [
-                        [
-                            'name' => 'id',
-                            'type' => 'bigint unsigned',
-                            'description' => 'Primary key.',
-                        ],
-                        [
-                            'name' => 'name',
-                            'type' => 'varchar',
-                            'description' => 'Full name of the user.',
-                        ],
-                        [
-                            'name' => 'email',
-                            'type' => 'varchar',
-                            'description' => 'Unique email address.',
-                        ],
-                    ],
-                    'relationships' => [
-                        ['type' => 'hasMany', 'table' => 'posts', 'foreign_key' => 'user_id'],
-                    ],
-                ],
-                [
-                    'name' => 'posts',
-                    'description' => 'Example table with blog posts authored by users.',
-                    'columns' => [
-                        [
-                            'name' => 'id',
-                            'type' => 'bigint unsigned',
-                            'description' => 'Primary key.',
-                        ],
-                        [
-                            'name' => 'user_id',
-                            'type' => 'bigint unsigned',
-                            'description' => 'Foreign key referencing the author (users.id).',
-                        ],
-                        [
-                            'name' => 'title',
-                            'type' => 'varchar',
-                            'description' => 'Title of the post.',
-                        ],
-                        [
-                            'name' => 'published_at',
-                            'type' => 'datetime',
-                            'description' => 'Publication timestamp.',
-                        ],
-                    ],
-                    'relationships' => [
-                        ['type' => 'belongsTo', 'table' => 'users', 'foreign_key' => 'user_id'],
-                        ['type' => 'hasMany', 'table' => 'comments', 'foreign_key' => 'post_id'],
-                    ],
-                ],
-                [
-                    'name' => 'comments',
-                    'description' => 'Example table storing comments on posts.',
-                    'columns' => [
-                        [
-                            'name' => 'id',
-                            'type' => 'bigint unsigned',
-                            'description' => 'Primary key.',
-                        ],
-                        [
-                            'name' => 'post_id',
-                            'type' => 'bigint unsigned',
-                            'description' => 'Foreign key referencing the related post (posts.id).',
-                        ],
-                        [
-                            'name' => 'user_id',
-                            'type' => 'bigint unsigned',
-                            'description' => 'Foreign key referencing the author of the comment (users.id).',
-                        ],
-                        [
-                            'name' => 'body',
-                            'type' => 'text',
-                            'description' => 'Content of the comment.',
-                        ],
-                    ],
-                    'relationships' => [
-                        ['type' => 'belongsTo', 'table' => 'posts', 'foreign_key' => 'post_id'],
-                        ['type' => 'belongsTo', 'table' => 'users', 'foreign_key' => 'user_id'],
-                    ],
-                ],
+                // Define your table metadata here. Example:
+                //
+                // [
+                //     'name' => 'users',
+                //     'description' => 'Registered application users.',
+                //     'columns' => [
+                //         ['name' => 'id', 'type' => 'bigint unsigned', 'description' => 'Primary key.'],
+                //         ['name' => 'name', 'type' => 'varchar', 'description' => 'Full name.'],
+                //         ['name' => 'email', 'type' => 'varchar', 'description' => 'Unique email address.'],
+                //     ],
+                //     'relationships' => [
+                //         ['type' => 'hasMany', 'table' => 'posts', 'foreign_key' => 'user_id'],
+                //     ],
+                // ],
             ],
         ],
-        // 'adf' => [
-        //     'connection' => 'mysql_adf',
-        //     'database' => [
-        //         'type' => 'MariaDB 10.6',
-        //         'name' => 'adf_reporting',
-        //     ],
-        //     'exclude_tables' => ['migrations'],
-        //     'tables' => [],
-        // ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Debug Mode
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, responses include executed queries, bindings, and timing.
+    | Can also be toggled per-request via the "debug" body parameter.
+    |
+    */
+
     'debug' => (bool) env('LARAGREP_DEBUG', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Route Configuration
+    |--------------------------------------------------------------------------
+    */
+
     'route' => [
-        'prefix' => 'laragrep',
+        'prefix' => env('LARAGREP_ROUTE_PREFIX', 'laragrep'),
         'middleware' => [],
     ],
+
 ];
