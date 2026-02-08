@@ -251,6 +251,35 @@ Add authentication middleware in your config:
 POST /laragrep/{scope?}
 ```
 
+**cURL example:**
+
+```bash
+curl -X POST http://localhost/laragrep \
+  -H "Content-Type: application/json" \
+  -d '{"question": "How many users registered this week?"}'
+```
+
+With authentication and options:
+
+```bash
+curl -X POST http://localhost/laragrep \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "question": "How many users registered this week?",
+    "conversation_id": "optional-uuid-for-follow-ups",
+    "debug": true
+  }'
+```
+
+Using a named scope:
+
+```bash
+curl -X POST http://localhost/laragrep/analytics \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What are the top 5 products by revenue?"}'
+```
+
 **Request body:**
 
 ```json
