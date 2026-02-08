@@ -42,13 +42,20 @@ class PromptBuilder
                     ->map(function (array $column) {
                         $description = $column['description'] ?? '';
                         $type = $column['type'] ?? '';
+                        $template = $column['template'] ?? null;
 
-                        return sprintf(
+                        $line = sprintf(
                             '- %s (%s)%s',
                             $column['name'],
                             $type ?: 'unknown',
                             $description ? ': ' . $description : ''
                         );
+
+                        if (is_string($template) && $template !== '') {
+                            $line .= PHP_EOL . '  Example: ' . $template;
+                        }
+
+                        return $line;
                     })
                     ->implode(PHP_EOL);
 
@@ -155,6 +162,42 @@ class PromptBuilder
                 'You have reached the maximum number of queries. Based on the data collected so far, provide your best final answer now. Respond with: {"action": "answer", "summary": "<your answer in %s>"}',
                 $userLanguage
             ),
+        ];
+    }
+
+    /**
+     * Build messages for the schema filtering call.
+     * The AI sees all tables (names + descriptions only) and identifies which ones are relevant.
+     *
+     * @return array<int, array{role: string, content: string}>
+     */
+    public function buildSchemaFilterMessages(string $question, array $tables): array
+    {
+        $tableList = collect($tables)
+            ->map(function (array $table) {
+                $name = $table['name'] ?? '';
+                $description = trim(($table['description'] ?? '') ?: '');
+
+                return $description !== ''
+                    ? sprintf('- %s: %s', $name, $description)
+                    : sprintf('- %s', $name);
+            })
+            ->implode(PHP_EOL);
+
+        return [
+            [
+                'role' => 'system',
+                'content' => 'You are a database schema analyst. Given a list of tables and a user question, identify which tables are needed to answer the question. Include tables that might be needed for JOINs or relationships, even if not directly mentioned in the question.',
+            ],
+            [
+                'role' => 'user',
+                'content' => implode(PHP_EOL . PHP_EOL, [
+                    'Available tables:',
+                    $tableList,
+                    'Question: ' . $question,
+                    'Respond with ONLY a JSON object: {"tables": ["table1", "table2", ...]}',
+                ]),
+            ],
         ];
     }
 

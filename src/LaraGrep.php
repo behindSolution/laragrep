@@ -2,6 +2,7 @@
 
 namespace LaraGrep;
 
+use LaraGrep\Config\Table;
 use LaraGrep\Contracts\AiClientInterface;
 use LaraGrep\Contracts\ConversationStoreInterface;
 use LaraGrep\Contracts\MetadataLoaderInterface;
@@ -38,6 +39,7 @@ class LaraGrep
         $this->queryExecutor->setConnection($scopeConfig['connection'] ?? null);
 
         $tables = $this->resolveMetadata($scopeConfig);
+        $tables = $this->applySmartSchema($tables, $question, $scopeConfig);
 
         $knownTables = array_values(array_filter(array_map(
             fn(array $t) => strtolower($t['name'] ?? ''),
@@ -182,6 +184,11 @@ class LaraGrep
             $configTables = [];
         }
 
+        $configTables = array_map(
+            fn($t) => $t instanceof Table ? $t->toArray() : $t,
+            $configTables,
+        );
+
         $configTables = array_values(array_filter($configTables, fn($t) => is_array($t)));
 
         if ($mode === 'manual') {
@@ -235,6 +242,47 @@ class LaraGrep
         }
 
         return array_values($merged);
+    }
+
+    /**
+     * Filter tables to only those relevant to the question using an AI recognition call.
+     * Activated when smart_schema is configured and table count exceeds the threshold.
+     *
+     * @return array<int, array{name: string, description: string, columns: array}>
+     */
+    protected function applySmartSchema(array $tables, string $question, array $scopeConfig): array
+    {
+        $threshold = $scopeConfig['smart_schema'] ?? $this->config['smart_schema'] ?? null;
+
+        if ($threshold === null || $threshold === false) {
+            return $tables;
+        }
+
+        $threshold = (int) $threshold;
+
+        if ($threshold < 1 || count($tables) < $threshold) {
+            return $tables;
+        }
+
+        $messages = $this->promptBuilder->buildSchemaFilterMessages($question, $tables);
+
+        try {
+            $response = $this->aiClient->chat($messages);
+            $selectedNames = $this->responseParser->parseTableSelection($response);
+        } catch (RuntimeException) {
+            return $tables;
+        }
+
+        if ($selectedNames === []) {
+            return $tables;
+        }
+
+        $filtered = array_values(array_filter(
+            $tables,
+            fn(array $t) => in_array(strtolower($t['name'] ?? ''), $selectedNames, true),
+        ));
+
+        return $filtered !== [] ? $filtered : $tables;
     }
 
     protected function normalizeId(?string $id): ?string

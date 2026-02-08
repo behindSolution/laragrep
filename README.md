@@ -73,6 +73,18 @@ LARAGREP_MAX_ITERATIONS=10
 
 Simple questions typically resolve in 1-2 iterations. Complex analytical questions may need more. Higher values increase capability but also cost (more API calls per question).
 
+### Smart Schema
+
+For large databases, LaraGrep can make an initial AI call to identify only the tables relevant to the question. The agent loop then runs with a filtered schema, significantly reducing token usage.
+
+```env
+LARAGREP_SMART_SCHEMA=20
+```
+
+When set to a number (e.g., `20`), smart schema activates automatically when the total table count reaches that threshold. Set to `null` (default) to disable. Can also be overridden per context.
+
+With 200 tables and only 5 relevant, this reduces token usage by ~60% across the agent loop iterations.
+
 ### Schema Loading Mode
 
 LaraGrep supports three modes for providing table metadata to the AI:
@@ -91,25 +103,77 @@ LARAGREP_SCHEMA_MODE=manual
 - **auto** is ideal for quick setup when all tables are fair game.
 - **merged** lets you auto-load and then add descriptions, relationships, or virtual tables on top.
 
-### Manual Table Definitions
+### Table Definitions
 
-Define your tables in `config/laragrep.php` under `contexts.default.tables`:
+Define your tables in `config/laragrep.php` using fluent classes with IDE autocomplete:
 
 ```php
+use LaraGrep\Config\Table;
+use LaraGrep\Config\Column;
+use LaraGrep\Config\Relationship;
+
 'tables' => [
-    [
-        'name' => 'orders',
-        'description' => 'Customer orders.',
-        'columns' => [
-            ['name' => 'id', 'type' => 'bigint unsigned', 'description' => 'Primary key.'],
-            ['name' => 'user_id', 'type' => 'bigint unsigned', 'description' => 'FK to users.id.'],
-            ['name' => 'total', 'type' => 'decimal(10,2)', 'description' => 'Order total.'],
-            ['name' => 'created_at', 'type' => 'datetime', 'description' => 'Creation timestamp.'],
-        ],
-        'relationships' => [
-            ['type' => 'belongsTo', 'table' => 'users', 'foreign_key' => 'user_id'],
-        ],
-    ],
+    Table::make('orders')
+        ->description('Customer orders.')
+        ->columns([
+            Column::id(),
+            Column::bigInteger('user_id')->unsigned()->description('FK to users.id.'),
+            Column::decimal('total', 10, 2)->description('Order total.'),
+            Column::enum('status', ['pending', 'paid', 'cancelled']),
+            Column::json('metadata')
+                ->description('Order metadata')
+                ->template(['shipping_method' => 'express', 'tracking_code' => 'BR123456789']),
+            Column::timestamp('created_at'),
+        ])
+        ->relationships([
+            Relationship::belongsTo('users', 'user_id'),
+        ]),
+],
+```
+
+The `Column` class supports the same types as Laravel migrations: `id()`, `bigInteger()`, `integer()`, `smallInteger()`, `tinyInteger()`, `string()`, `text()`, `decimal()`, `float()`, `boolean()`, `date()`, `dateTime()`, `timestamp()`, `json()`, `enum()`. Modifiers: `->unsigned()`, `->nullable()`, `->description()`.
+
+For JSON columns, `->template()` provides an example structure so the AI knows how to query it with `JSON_EXTRACT`.
+
+#### Organizing Large Schemas
+
+For projects with many tables, extract each definition into its own class:
+
+```php
+// app/LaraGrep/Tables/OrdersTable.php
+namespace App\LaraGrep\Tables;
+
+use LaraGrep\Config\Table;
+use LaraGrep\Config\Column;
+use LaraGrep\Config\Relationship;
+
+class OrdersTable
+{
+    public static function define(): Table
+    {
+        return Table::make('orders')
+            ->description('Customer orders.')
+            ->columns([
+                Column::id(),
+                Column::bigInteger('user_id')->unsigned(),
+                Column::decimal('total', 10, 2),
+                Column::timestamp('created_at'),
+            ])
+            ->relationships([
+                Relationship::belongsTo('users', 'user_id'),
+            ]);
+    }
+}
+```
+
+Then import them in your config:
+
+```php
+// config/laragrep.php
+'tables' => [
+    \App\LaraGrep\Tables\UsersTable::define(),
+    \App\LaraGrep\Tables\OrdersTable::define(),
+    \App\LaraGrep\Tables\ProductsTable::define(),
 ],
 ```
 
@@ -260,6 +324,7 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_BASE_URL`                 | —                    | Override API endpoint URL            |
 | `LARAGREP_MAX_TOKENS`              | `1024`               | Max response tokens                  |
 | `LARAGREP_MAX_ITERATIONS`          | `10`                 | Max query iterations per question    |
+| `LARAGREP_SMART_SCHEMA`           | —                    | Table count threshold for smart filtering |
 | `LARAGREP_SCHEMA_MODE`             | `manual`             | Schema loading mode                  |
 | `LARAGREP_USER_LANGUAGE`           | `en`                 | AI response language                 |
 | `LARAGREP_CONNECTION`              | —                    | Database connection name             |

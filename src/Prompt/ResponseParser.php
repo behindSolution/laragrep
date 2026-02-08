@@ -8,6 +8,32 @@ use RuntimeException;
 class ResponseParser
 {
     /**
+     * Parse the AI response from a schema filtering call.
+     *
+     * @return string[] List of table names the AI identified as relevant.
+     *
+     * @throws RuntimeException
+     */
+    public function parseTableSelection(string $content): array
+    {
+        $content = trim($content);
+        $content = preg_replace('/^```(?:json)?\s*/im', '', $content);
+        $content = preg_replace('/\s*```\s*$/m', '', $content);
+        $content = trim($content);
+
+        $decoded = json_decode($content, true);
+
+        if (!is_array($decoded) || !isset($decoded['tables']) || !is_array($decoded['tables'])) {
+            throw new RuntimeException('Schema filter response must be a JSON object with a "tables" array.');
+        }
+
+        return array_values(array_filter(
+            array_map(fn($t) => is_string($t) ? strtolower(trim($t)) : '', $decoded['tables']),
+            fn($t) => $t !== '',
+        ));
+    }
+
+    /**
      * Parse an agent loop response into a structured action.
      *
      * @param  string  $content  Raw AI text response.

@@ -57,6 +57,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Smart Schema
+    |--------------------------------------------------------------------------
+    |
+    | When the number of tables reaches this threshold, LaraGrep makes an
+    | initial AI call to identify only the tables relevant to the question.
+    | Subsequent agent loop iterations use the filtered schema, reducing
+    | token usage significantly for large databases.
+    |
+    | Set to null to disable, or a number (e.g., 20) to enable automatically
+    | when the schema has that many tables or more. Can also be overridden
+    | per context.
+    |
+    */
+
+    'smart_schema' => env('LARAGREP_SMART_SCHEMA'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Custom System Prompt
     |--------------------------------------------------------------------------
     |
@@ -118,20 +136,20 @@ return [
                 'name' => env('LARAGREP_DATABASE_NAME', env('DB_DATABASE', '')),
             ],
             'tables' => [
-                // Define your table metadata here. Example:
+                // Define your table metadata using fluent classes. Example:
                 //
-                // [
-                //     'name' => 'users',
-                //     'description' => 'Registered application users.',
-                //     'columns' => [
-                //         ['name' => 'id', 'type' => 'bigint unsigned', 'description' => 'Primary key.'],
-                //         ['name' => 'name', 'type' => 'varchar', 'description' => 'Full name.'],
-                //         ['name' => 'email', 'type' => 'varchar', 'description' => 'Unique email address.'],
-                //     ],
-                //     'relationships' => [
-                //         ['type' => 'hasMany', 'table' => 'posts', 'foreign_key' => 'user_id'],
-                //     ],
-                // ],
+                // Table::make('users')
+                //     ->description('Registered application users.')
+                //     ->columns([
+                //         Column::id(),
+                //         Column::string('name')->description('Full name.'),
+                //         Column::string('email')->description('Unique email address.'),
+                //     ])
+                //     ->relationships([
+                //         Relationship::hasMany('posts', 'user_id'),
+                //     ]),
+                //
+                // use LaraGrep\Config\{Table, Column, Relationship};
             ],
         ],
     ],
