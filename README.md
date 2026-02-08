@@ -1,6 +1,6 @@
 # LaraGrep
 
-Transform natural language questions into safe, parameterized SQL SELECT queries using OpenAI or Anthropic. LaraGrep exposes an API endpoint, loads your database schema metadata, and returns human-readable answers powered by AI.
+Transform natural language questions into safe, parameterized SQL SELECT queries using OpenAI or Anthropic. LaraGrep uses an **agent loop** — the AI executes queries one at a time, sees the results, and iteratively reasons until it can provide a final answer.
 
 ## Requirements
 
@@ -18,6 +18,35 @@ Publish the configuration file:
 
 ```bash
 php artisan vendor:publish --tag=laragrep-config
+```
+
+## How It Works
+
+Unlike simple text-to-SQL tools, LaraGrep uses an **agent loop**:
+
+1. You ask a question in natural language
+2. The AI analyzes the schema and decides which query to run
+3. LaraGrep validates and executes the query safely
+4. The AI sees the results and decides: run another query, or provide the final answer
+5. Repeat until the AI has enough data to answer (up to `max_iterations`)
+
+This means the AI can:
+- Build on previous query results to answer complex questions
+- Self-correct if a query returns unexpected data
+- Break down complex analysis into multiple steps
+- **Batch independent queries** in a single iteration to save API calls
+
+```
+"How many users and how many orders do I have?"
+
+  → AI: Sends 2 queries in one batch (independent)        (1 API call)
+  → AI: Sees both results, provides the final answer       (1 API call)
+
+"Which seller grew the most compared to last month?"
+
+  → AI: SELECT seller_id, SUM(total) ... WHERE month = CURRENT  (1 API call)
+  → AI: SELECT seller_id, SUM(total) ... WHERE month = PREVIOUS (1 API call)
+  → AI: Compares both datasets and provides the final answer    (1 API call)
 ```
 
 ## Configuration
@@ -39,6 +68,16 @@ LARAGREP_PROVIDER=anthropic
 LARAGREP_API_KEY=sk-ant-...
 LARAGREP_MODEL=claude-sonnet-4-20250514
 ```
+
+### Agent Loop
+
+Control how many query iterations the AI can perform per question:
+
+```env
+LARAGREP_MAX_ITERATIONS=10
+```
+
+Simple questions typically resolve in 1-2 iterations. Complex analytical questions may need more. Higher values increase capability but also cost (more API calls per question).
 
 ### Schema Loading Mode
 
@@ -162,7 +201,8 @@ POST /laragrep/{scope?}
         {
             "query": "SELECT COUNT(*) as total FROM users WHERE created_at >= ?",
             "bindings": ["2025-01-20"],
-            "results": [{"total": 42}]
+            "results": [{"total": 42}],
+            "reason": "Counting users registered in the current week"
         }
     ],
     "bindings": ["2025-01-20"],
@@ -170,7 +210,8 @@ POST /laragrep/{scope?}
     "debug": {
         "queries": [
             {"query": "SELECT COUNT(*) ...", "bindings": [...], "time": 1.23}
-        ]
+        ],
+        "iterations": 1
     }
 }
 ```
@@ -224,6 +265,7 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_MODEL`                    | `gpt-4o-mini`        | Model identifier                     |
 | `LARAGREP_BASE_URL`                 | —                    | Override API endpoint URL            |
 | `LARAGREP_MAX_TOKENS`              | `1024`               | Max response tokens                  |
+| `LARAGREP_MAX_ITERATIONS`          | `10`                 | Max query iterations per question    |
 | `LARAGREP_SCHEMA_MODE`             | `manual`             | Schema loading mode                  |
 | `LARAGREP_USER_LANGUAGE`           | `en`                 | AI response language                 |
 | `LARAGREP_CONNECTION`              | —                    | Database connection name             |
@@ -242,6 +284,7 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 - Only `SELECT` queries are generated and executed — mutations are rejected.
 - All queries use parameterized bindings to prevent SQL injection.
 - Table references are validated against the known schema metadata.
+- The agent loop is capped at `max_iterations` to prevent runaway costs.
 - Protect the endpoint with middleware (e.g., `auth:sanctum`).
 
 ## License

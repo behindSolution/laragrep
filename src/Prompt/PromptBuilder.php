@@ -6,13 +6,22 @@ class PromptBuilder
 {
     public function buildUserPrompt(string $question): string
     {
-        return implode(PHP_EOL . PHP_EOL, array_filter([
-            'Use the available schema to produce one or more safe SQL SELECT queries that answer the user\'s question. If multiple steps are required, describe them in the order they should be executed.',
-            'Respond strictly in JSON with the format {"steps": [{"query": "...", "bindings": []}, ...]}. Only generate parameterized SELECT statements and never produce CREATE, INSERT, UPDATE, DELETE, DROP, ALTER, or any other mutating commands. If the user requests any write operation or an unsafe action, respond instead with {"steps": [], "summary": "<polite refusal in the user language>"}.',
-            'If the question can be answered without running a database query (for example, it only references prior conversation, is outside the scope of the schema, or requests unsupported data), respond with {"steps": [], "summary": "<clear explanation in the user language>"}.',
-            'Only reference tables that are explicitly listed in the schema summary. If the necessary table is missing, do not guess—return {"steps": [], "summary": "<explain the limitation in the user language>"}.',
+        return implode(PHP_EOL . PHP_EOL, [
+            'You are a database assistant. Answer the user\'s question by executing SQL queries.',
+            'You MUST respond with a single JSON object per turn. Choose one of two actions:',
+            '1. Execute queries: {"action": "query", "queries": [{"query": "SELECT ...", "bindings": [], "reason": "Why this query is needed"}]}',
+            '2. Provide the final answer: {"action": "answer", "summary": "Your human-readable answer here"}',
+            'The "queries" array can contain one or more queries. Use multiple queries in a single turn when they are independent of each other (e.g., counting users and counting orders). Use separate turns when a query depends on the result of a previous one.',
+            'Rules:'
+            . PHP_EOL . '- Only generate parameterized SELECT statements. Never produce CREATE, INSERT, UPDATE, DELETE, DROP, ALTER, or any mutating command.'
+            . PHP_EOL . '- Only reference tables explicitly listed in the schema. If a table is missing, use {"action": "answer", "summary": "<explain the limitation>"}.'
+            . PHP_EOL . '- If the question cannot be answered with a query (out of scope, unsafe request, etc.), respond directly with {"action": "answer", "summary": "<polite explanation>"}.'
+            . PHP_EOL . '- Write the "summary" in the user\'s language.'
+            . PHP_EOL . '- After receiving query results, analyze them and decide: run more queries if needed, or provide the final answer.'
+            . PHP_EOL . '- Do not mention SQL, queries, bindings, or technical terms in the final summary. Give a clear, business-oriented answer.'
+            . PHP_EOL . '- You can use these HTML tags in the summary: table, b, ul, ol, i, td, tr, th, thead, tbody. Do not use markdown.',
             'Question: ' . $question,
-        ]));
+        ]);
     }
 
     /**
@@ -136,45 +145,17 @@ class PromptBuilder
     }
 
     /**
-     * @param  array<int, array{query: string, bindings: array, results: array}>  $executedSteps
-     * @return array<int, array{role: string, content: string}>
+     * Build a message asking the AI to provide a final answer with whatever data it has so far.
      */
-    public function buildInterpretationMessages(
-        string $question,
-        array $executedSteps,
-        string $userLanguage = 'en',
-        ?string $interpretationPrompt = null,
-    ): array {
-        $messages = [];
-
-        $systemPrompt = is_string($interpretationPrompt) ? trim($interpretationPrompt) : '';
-
-        if ($systemPrompt !== '') {
-            $messages[] = ['role' => 'system', 'content' => $systemPrompt];
-        }
-
-        $stepsForModel = array_map(
-            fn(array $step) => [
-                'query' => $step['query'],
-                'bindings' => array_values($step['bindings']),
-                'results' => $step['results'],
-            ],
-            $executedSteps
-        );
-
-        $messages[] = [
+    public function buildForceAnswerMessage(string $userLanguage = 'en'): array
+    {
+        return [
             'role' => 'user',
-            'content' => implode(PHP_EOL . PHP_EOL, [
-                'Original question: ' . $question,
-                'Executed queries (JSON): ' . json_encode($stepsForModel, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                sprintf(
-                    'Provide a concise, business-oriented summary in %s that only reports the requested result. Do not mention SQL, queries, bindings, code, or technical terms. Explain what the numbers mean only if the user explicitly asked for that. If the list is empty, politely state that no records were found. You can only use those html tags: table,b,ul,ol,i,td,tr. Do not use markdown!',
-                    $userLanguage
-                ),
-            ]),
+            'content' => sprintf(
+                'You have reached the maximum number of queries. Based on the data collected so far, provide your best final answer now. Respond with: {"action": "answer", "summary": "<your answer in %s>"}',
+                $userLanguage
+            ),
         ];
-
-        return $messages;
     }
 
     protected function buildDatabaseContextLine(?array $database): ?string

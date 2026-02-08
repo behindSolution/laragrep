@@ -40,17 +40,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Custom Prompts
+    | Agent Loop
     |--------------------------------------------------------------------------
     |
-    | Override the built-in system prompt or interpretation prompt.
-    | Leave null to use the defaults.
+    | Maximum number of query iterations the AI can perform per question.
+    | The AI executes one query at a time, sees the results, and decides
+    | whether to run another query or provide the final answer.
+    |
+    | Simple questions typically need 1-2 iterations. Complex analytical
+    | questions may need more. Higher values increase capability but also
+    | cost (more API calls per question).
+    |
+    */
+
+    'max_iterations' => (int) env('LARAGREP_MAX_ITERATIONS', 10),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Custom System Prompt
+    |--------------------------------------------------------------------------
+    |
+    | Override the built-in system prompt. Leave null to use the default.
     |
     */
 
     'system_prompt' => env('LARAGREP_SYSTEM_PROMPT'),
-
-    'interpretation_prompt' => env('LARAGREP_INTERPRETATION_PROMPT'),
 
     /*
     |--------------------------------------------------------------------------

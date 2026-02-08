@@ -8,11 +8,14 @@ use RuntimeException;
 class ResponseParser
 {
     /**
+     * Parse an agent loop response into a structured action.
+     *
      * @param  string  $content  Raw AI text response.
-     * @param  array<int, string>  $knownTables  Lowercased known table names for validation.
-     * @return array{steps: array<int, array{query: string, bindings: array}>, summary: string|null}
+     * @return array{action: 'query'|'answer', queries?: array<int, array{query: string, bindings: array, reason: string|null}>, summary?: string}
+     *
+     * @throws RuntimeException
      */
-    public function parseQueryPlan(string $content, array $knownTables = []): array
+    public function parseAction(string $content): array
     {
         $content = trim($content);
         $content = preg_replace('/^```(?:json)?\s*/im', '', $content);
@@ -25,66 +28,71 @@ class ResponseParser
             throw new RuntimeException('Language model response was not valid JSON.');
         }
 
-        $steps = $decoded['steps'] ?? null;
+        $action = $decoded['action'] ?? null;
 
-        if (!is_array($steps)) {
-            throw new RuntimeException('Language model response did not include query steps.');
+        if (!is_string($action) || !in_array($action, ['query', 'answer'], true)) {
+            throw new RuntimeException('Language model response must include "action" as "query" or "answer".');
+        }
+
+        if ($action === 'answer') {
+            $summary = isset($decoded['summary']) && is_string($decoded['summary'])
+                ? trim($decoded['summary'])
+                : '';
+
+            if ($summary === '') {
+                throw new RuntimeException('Language model returned an answer action without a summary.');
+            }
+
+            return [
+                'action' => 'answer',
+                'summary' => $summary,
+            ];
+        }
+
+        // action === 'query'
+        $queries = $decoded['queries'] ?? null;
+
+        if (!is_array($queries) || $queries === []) {
+            throw new RuntimeException('Language model returned a query action without a "queries" array.');
         }
 
         $normalized = [];
 
-        foreach ($steps as $index => $step) {
-            if (!is_array($step)) {
-                throw new RuntimeException('Language model response returned an invalid step.');
+        foreach ($queries as $index => $entry) {
+            if (!is_array($entry)) {
+                throw new RuntimeException(sprintf('Invalid query entry at index %d.', $index));
             }
 
-            $query = isset($step['query']) ? trim((string) $step['query']) : '';
+            $query = isset($entry['query']) ? trim((string) $entry['query']) : '';
 
             if ($query === '') {
-                throw new RuntimeException(sprintf(
-                    'Language model response did not include a SQL query for step %d.',
-                    $index + 1
-                ));
+                throw new RuntimeException(sprintf('Empty SQL query at index %d.', $index));
             }
 
             if (!Str::startsWith(strtolower($query), 'select')) {
                 throw new RuntimeException('Only SELECT queries are allowed.');
             }
 
-            $bindings = $step['bindings'] ?? [];
+            $bindings = $entry['bindings'] ?? [];
 
             if (!is_array($bindings)) {
-                throw new RuntimeException('Language model response provided invalid bindings.');
+                throw new RuntimeException(sprintf('Invalid bindings at index %d.', $index));
             }
+
+            $reason = isset($entry['reason']) && is_string($entry['reason'])
+                ? trim($entry['reason'])
+                : null;
 
             $normalized[] = [
                 'query' => $query,
                 'bindings' => array_values($bindings),
+                'reason' => $reason,
             ];
         }
 
-        $summary = isset($decoded['summary']) && is_string($decoded['summary'])
-            ? trim($decoded['summary'])
-            : null;
-
-        if ($normalized === [] && $summary === null) {
-            throw new RuntimeException('Language model response did not include query steps.');
-        }
-
         return [
-            'steps' => $normalized,
-            'summary' => $summary,
+            'action' => 'query',
+            'queries' => $normalized,
         ];
-    }
-
-    public function parseFinalResponse(string $content): string
-    {
-        $content = trim($content);
-
-        if ($content === '') {
-            throw new RuntimeException('Language model did not return a final answer.');
-        }
-
-        return $content;
     }
 }
