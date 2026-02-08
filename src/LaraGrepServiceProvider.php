@@ -10,6 +10,10 @@ use LaraGrep\Contracts\ConversationStoreInterface;
 use LaraGrep\Contracts\MetadataLoaderInterface;
 use LaraGrep\Conversation\DatabaseConversationStore;
 use LaraGrep\Metadata\MysqlSchemaLoader;
+use LaraGrep\Monitor\MonitorRecorder;
+use LaraGrep\Monitor\MonitorRepository;
+use LaraGrep\Monitor\MonitorStore;
+use LaraGrep\Monitor\TokenEstimator;
 use LaraGrep\Prompt\PromptBuilder;
 use LaraGrep\Prompt\ResponseParser;
 use LaraGrep\Query\QueryExecutor;
@@ -107,6 +111,73 @@ class LaraGrepServiceProvider extends ServiceProvider
                 config: $config,
             );
         });
+
+        $this->app->singleton(TokenEstimator::class);
+
+        $this->app->singleton(MonitorStore::class, function ($app) {
+            $config = $app['config']->get('laragrep.monitor', []);
+
+            if (!is_array($config) || !($config['enabled'] ?? false)) {
+                return null;
+            }
+
+            $connectionName = $config['connection'] ?? null;
+            $connectionConfig = $this->getConnectionConfig($app, $connectionName);
+
+            if ($connectionConfig === null) {
+                return null;
+            }
+
+            if (!$this->connectionSupportsConversations($app, $connectionConfig)) {
+                return null;
+            }
+
+            $connection = $connectionName
+                ? $app['db']->connection($connectionName)
+                : $app['db']->connection();
+
+            return new MonitorStore(
+                $connection,
+                (string) ($config['table'] ?? 'laragrep_logs'),
+                (int) ($config['retention_days'] ?? 30),
+            );
+        });
+
+        $this->app->singleton(MonitorRepository::class, function ($app) {
+            $config = $app['config']->get('laragrep.monitor', []);
+
+            if (!is_array($config) || !($config['enabled'] ?? false)) {
+                return null;
+            }
+
+            $connectionName = $config['connection'] ?? null;
+            $connection = is_string($connectionName) && $connectionName !== ''
+                ? $app['db']->connection($connectionName)
+                : $app['db']->connection();
+
+            return new MonitorRepository(
+                $connection,
+                (string) ($config['table'] ?? 'laragrep_logs'),
+            );
+        });
+
+        $this->app->singleton(MonitorRecorder::class, function ($app) {
+            $store = $app->make(MonitorStore::class);
+
+            if ($store === null) {
+                return null;
+            }
+
+            $config = $app['config']->get('laragrep', []);
+
+            return new MonitorRecorder(
+                $app->make(LaraGrep::class),
+                $store,
+                $app->make(TokenEstimator::class),
+                model: (string) ($config['model'] ?? ''),
+                provider: (string) ($config['provider'] ?? 'openai'),
+            );
+        });
     }
 
     public function boot(): void
@@ -116,6 +187,16 @@ class LaraGrepServiceProvider extends ServiceProvider
         ], 'laragrep-config');
 
         $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
+
+        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'laragrep');
+
+        $this->publishes([
+            __DIR__ . '/../resources/views' => resource_path('views/vendor/laragrep'),
+        ], 'laragrep-views');
+
+        if (config('laragrep.monitor.enabled', false)) {
+            $this->loadRoutesFrom(__DIR__ . '/../routes/monitor.php');
+        }
     }
 
     private function getConnectionConfig($app, ?string $connectionName): ?array

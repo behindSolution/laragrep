@@ -337,6 +337,47 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_CONVERSATION_CONNECTION` | `sqlite`             | DB connection for conversations      |
 | `LARAGREP_CONVERSATION_MAX_MESSAGES`| `10`                | Max messages per conversation        |
 | `LARAGREP_CONVERSATION_TTL_DAYS`   | `10`                 | Auto-delete conversations after days |
+| `LARAGREP_MONITOR_ENABLED`        | `false`              | Enable monitoring dashboard          |
+| `LARAGREP_MONITOR_CONNECTION`     | `sqlite`             | DB connection for monitor logs       |
+| `LARAGREP_MONITOR_TABLE`          | `laragrep_logs`      | Table name for monitor logs          |
+| `LARAGREP_MONITOR_RETENTION_DAYS` | `30`                 | Auto-delete logs after days          |
+
+## Monitor
+
+LaraGrep includes a built-in monitoring dashboard for tracking queries, errors, token usage, and performance. Disabled by default.
+
+### Enabling
+
+```env
+LARAGREP_MONITOR_ENABLED=true
+```
+
+### Dashboard
+
+Access the dashboard at `GET /laragrep/monitor`:
+
+- **Logs** — Filterable list of all queries with status, duration, iterations, and token estimates
+- **Overview** — Aggregate stats: success rate, errors, token usage, daily charts, top scopes, storage metrics
+- **Detail** — Full agent loop trace for each query: SQL, bindings, results, AI reasoning, errors
+
+### Protecting the Dashboard
+
+```php
+'monitor' => [
+    'enabled' => true,
+    'middleware' => ['auth:sanctum'],
+],
+```
+
+### What Gets Tracked
+
+- Question, scope, user ID, conversation ID
+- Status (success/error) with full error details and stack trace
+- Each agent loop step (SQL, bindings, results, AI reasoning)
+- Smart schema filtering (tables total vs filtered)
+- Estimated token usage
+- Response time
+- Raw query log with timing
 
 ## Security
 

@@ -15,7 +15,7 @@ class OpenAiClient implements AiClientInterface
     ) {
     }
 
-    public function chat(array $messages): string
+    public function chat(array $messages): AiResponse
     {
         $response = Http::withToken($this->apiKey)->post($this->baseUrl, [
             'model' => $this->model,
@@ -34,6 +34,12 @@ class OpenAiClient implements AiClientInterface
             throw new RuntimeException('OpenAI did not return message content.');
         }
 
-        return trim($content);
+        $usage = $data['usage'] ?? [];
+
+        return new AiResponse(
+            content: trim($content),
+            promptTokens: (int) ($usage['prompt_tokens'] ?? 0),
+            completionTokens: (int) ($usage['completion_tokens'] ?? 0),
+        );
     }
 }

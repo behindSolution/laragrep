@@ -7,11 +7,14 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Str;
 use LaraGrep\LaraGrep;
+use LaraGrep\Monitor\MonitorRecorder;
 
 class QueryController extends Controller
 {
-    public function __construct(protected LaraGrep $service)
-    {
+    public function __construct(
+        protected LaraGrep $service,
+        protected ?MonitorRecorder $recorder = null,
+    ) {
     }
 
     public function __invoke(Request $request, ?string $scope = null): JsonResponse
@@ -44,12 +47,22 @@ class QueryController extends Controller
             $conversationId = (string) Str::uuid();
         }
 
-        $answer = $this->service->answerQuestion(
-            $validated['question'],
-            $debug,
-            $scope,
-            $conversationId,
-        );
+        if ($this->recorder !== null) {
+            $answer = $this->recorder->answerQuestion(
+                $validated['question'],
+                $debug,
+                $scope,
+                $conversationId,
+                auth()->id(),
+            );
+        } else {
+            $answer = $this->service->answerQuestion(
+                $validated['question'],
+                $debug,
+                $scope,
+                $conversationId,
+            );
+        }
 
         if ($conversationId !== null) {
             $answer['conversation_id'] = $conversationId;

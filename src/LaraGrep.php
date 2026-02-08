@@ -14,6 +14,10 @@ use RuntimeException;
 
 class LaraGrep
 {
+    protected array $lastSchemaStats = [];
+    protected int $lastPromptTokens = 0;
+    protected int $lastCompletionTokens = 0;
+
     public function __construct(
         protected AiClientInterface $aiClient,
         protected PromptBuilder $promptBuilder,
@@ -32,6 +36,9 @@ class LaraGrep
         ?string $scope = null,
         ?string $conversationId = null,
     ): array {
+        $this->lastPromptTokens = 0;
+        $this->lastCompletionTokens = 0;
+
         $scopeConfig = $this->resolveScopeConfig($scope);
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
         $maxIterations = (int) ($this->config['max_iterations'] ?? 10);
@@ -39,7 +46,9 @@ class LaraGrep
         $this->queryExecutor->setConnection($scopeConfig['connection'] ?? null);
 
         $tables = $this->resolveMetadata($scopeConfig);
+        $tablesTotal = count($tables);
         $tables = $this->applySmartSchema($tables, $question, $scopeConfig);
+        $this->lastSchemaStats = ['total' => $tablesTotal, 'filtered' => count($tables)];
 
         $knownTables = array_values(array_filter(array_map(
             fn(array $t) => strtolower($t['name'] ?? ''),
@@ -66,7 +75,10 @@ class LaraGrep
         $summary = null;
 
         for ($iteration = 0; $iteration < $maxIterations; $iteration++) {
-            $response = $this->aiClient->chat($messages);
+            $aiResponse = $this->aiClient->chat($messages);
+            $this->lastPromptTokens += $aiResponse->promptTokens;
+            $this->lastCompletionTokens += $aiResponse->completionTokens;
+            $response = $aiResponse->content;
 
             try {
                 $action = $this->responseParser->parseAction($response);
@@ -121,7 +133,10 @@ class LaraGrep
         if ($summary === null) {
             $messages[] = $this->promptBuilder->buildForceAnswerMessage($userLanguage);
 
-            $response = $this->aiClient->chat($messages);
+            $aiResponse = $this->aiClient->chat($messages);
+            $this->lastPromptTokens += $aiResponse->promptTokens;
+            $this->lastCompletionTokens += $aiResponse->completionTokens;
+            $response = $aiResponse->content;
 
             try {
                 $action = $this->responseParser->parseAction($response);
@@ -267,8 +282,10 @@ class LaraGrep
         $messages = $this->promptBuilder->buildSchemaFilterMessages($question, $tables);
 
         try {
-            $response = $this->aiClient->chat($messages);
-            $selectedNames = $this->responseParser->parseTableSelection($response);
+            $aiResponse = $this->aiClient->chat($messages);
+            $this->lastPromptTokens += $aiResponse->promptTokens;
+            $this->lastCompletionTokens += $aiResponse->completionTokens;
+            $selectedNames = $this->responseParser->parseTableSelection($aiResponse->content);
         } catch (RuntimeException) {
             return $tables;
         }
@@ -283,6 +300,19 @@ class LaraGrep
         ));
 
         return $filtered !== [] ? $filtered : $tables;
+    }
+
+    public function getLastSchemaStats(): array
+    {
+        return $this->lastSchemaStats;
+    }
+
+    public function getLastTokenUsage(): array
+    {
+        return [
+            'prompt_tokens' => $this->lastPromptTokens,
+            'completion_tokens' => $this->lastCompletionTokens,
+        ];
     }
 
     protected function normalizeId(?string $id): ?string

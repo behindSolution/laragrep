@@ -17,7 +17,7 @@ class AnthropicClient implements AiClientInterface
     ) {
     }
 
-    public function chat(array $messages): string
+    public function chat(array $messages): AiResponse
     {
         [$system, $prepared] = $this->prepareMessages($messages);
 
@@ -50,7 +50,14 @@ class AnthropicClient implements AiClientInterface
             throw new RuntimeException('Failed to decode Anthropic response.');
         }
 
-        return $this->extractContent($data);
+        $content = $this->extractContent($data);
+        $usage = $data['usage'] ?? [];
+
+        return new AiResponse(
+            content: $content,
+            promptTokens: (int) ($usage['input_tokens'] ?? 0),
+            completionTokens: (int) ($usage['output_tokens'] ?? 0),
+        );
     }
 
     /**

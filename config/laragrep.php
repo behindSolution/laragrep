@@ -156,6 +156,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Monitor
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, LaraGrep records every query call with timing, token
+    | estimates, errors, and agent loop steps. Access the dashboard at
+    | GET /laragrep/monitor. Disabled by default — no overhead when off.
+    |
+    */
+
+    'monitor' => [
+        'enabled' => (bool) env('LARAGREP_MONITOR_ENABLED', false),
+        'connection' => env('LARAGREP_MONITOR_CONNECTION', 'sqlite'),
+        'table' => env('LARAGREP_MONITOR_TABLE', 'laragrep_logs'),
+        'retention_days' => (int) env('LARAGREP_MONITOR_RETENTION_DAYS', 30),
+        'middleware' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Debug Mode
     |--------------------------------------------------------------------------
     |
