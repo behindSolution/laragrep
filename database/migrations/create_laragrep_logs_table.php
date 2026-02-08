@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('model', 100)->nullable();
             $table->string('provider', 50)->nullable();
             $table->string('conversation_id', 255)->nullable();
-            $table->string('user_id', 100)->nullable();
+            $table->string('user_id')->nullable();
             $table->string('status', 20)->default('success');
             $table->text('summary')->nullable();
             $table->text('steps');
