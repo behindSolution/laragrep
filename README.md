@@ -20,6 +20,16 @@ Publish the configuration file:
 php artisan vendor:publish --tag=laragrep-config
 ```
 
+Run the migrations (creates the `laragrep_conversations` and `laragrep_logs` tables):
+
+```bash
+php artisan migrate
+```
+
+> **Using a dedicated SQLite connection?** Create the file first: `touch database/laragrep.sqlite`
+>
+> To publish the migration files for customization: `php artisan vendor:publish --tag=laragrep-migrations`
+
 ## How It Works
 
 Unlike simple text-to-SQL tools, LaraGrep uses an **agent loop**:

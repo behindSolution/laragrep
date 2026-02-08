@@ -3,7 +3,6 @@
 namespace LaraGrep\Conversation;
 
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use LaraGrep\Contracts\ConversationStoreInterface;
@@ -20,8 +19,6 @@ class DatabaseConversationStore implements ConversationStoreInterface
     ) {
         $this->maxMessages = max(1, $this->maxMessages);
         $this->ttlDays = max(0, $this->ttlDays);
-
-        $this->ensureTableExists();
     }
 
     public function getMessages(string $conversationId): array
@@ -131,22 +128,4 @@ class DatabaseConversationStore implements ConversationStoreInterface
             ->delete();
     }
 
-    protected function ensureTableExists(): void
-    {
-        $schema = $this->connection->getSchemaBuilder();
-
-        if ($schema->hasTable($this->table)) {
-            return;
-        }
-
-        $schema->create($this->table, function (Blueprint $table) {
-            $table->bigIncrements('id');
-            $table->string('context', 255);
-            $table->string('role', 32);
-            $table->text('content');
-            $table->timestamp('created_at')->nullable();
-            $table->index('context');
-            $table->index('created_at');
-        });
-    }
 }
