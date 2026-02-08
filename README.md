@@ -73,6 +73,17 @@ LARAGREP_API_KEY=sk-ant-...
 LARAGREP_MODEL=claude-sonnet-4-20250514
 ```
 
+For Ollama (local models):
+
+```env
+LARAGREP_PROVIDER=openai
+LARAGREP_API_KEY=ollama
+LARAGREP_MODEL=qwen3-coder:30b
+LARAGREP_BASE_URL=http://localhost:11434/v1/chat/completions
+```
+
+Ollama exposes an OpenAI-compatible API, so it works with the `openai` provider. The API key can be any non-empty string — Ollama does not validate it. This keeps your data fully local, with no external API calls.
+
 ### Agent Loop
 
 Control how many query iterations the AI can perform per question:
