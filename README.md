@@ -34,19 +34,13 @@ This means the AI can:
 - Build on previous query results to answer complex questions
 - Self-correct if a query returns unexpected data
 - Break down complex analysis into multiple steps
-- **Batch independent queries** in a single iteration to save API calls
+- Batch independent queries** in a single iteration to save API calls
 
 ```
 "How many users and how many orders do I have?"
 
   → AI: Sends 2 queries in one batch (independent)        (1 API call)
   → AI: Sees both results, provides the final answer       (1 API call)
-
-"Which seller grew the most compared to last month?"
-
-  → AI: SELECT seller_id, SUM(total) ... WHERE month = CURRENT  (1 API call)
-  → AI: SELECT seller_id, SUM(total) ... WHERE month = PREVIOUS (1 API call)
-  → AI: Compares both datasets and provides the final answer    (1 API call)
 ```
 
 ## Configuration
