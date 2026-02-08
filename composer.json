@@ -1,5 +1,5 @@
 {
-    "name": "laragrep/laragrep",
+    "name": "behindsolution/laragrep",
     "description": "Transform natural language questions into safe parameterized SQL queries using AI.",
     "type": "library",
     "license": "MIT",

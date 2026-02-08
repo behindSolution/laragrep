@@ -11,7 +11,7 @@ Transform natural language questions into safe, parameterized SQL SELECT queries
 ## Installation
 
 ```bash
-composer require laragrep/laragrep
+composer require behindsolution/laragrep
 ```
 
 Publish the configuration file:
