@@ -97,9 +97,28 @@ class LaraGrep
             $batchResults = [];
 
             foreach ($action['queries'] as $entry) {
-                $this->queryValidator->validate($entry['query'], $knownTables);
+                try {
+                    $this->queryValidator->validate($entry['query'], $knownTables);
+                    $execution = $this->queryExecutor->execute($entry['query'], $entry['bindings'], $debug);
+                } catch (RuntimeException $e) {
+                    $errorMsg = $e->getMessage();
+                    $availableTables = implode(', ', $knownTables);
 
-                $execution = $this->queryExecutor->execute($entry['query'], $entry['bindings'], $debug);
+                    $executedSteps[] = [
+                        'query' => $entry['query'],
+                        'bindings' => $entry['bindings'],
+                        'results' => [],
+                        'reason' => $entry['reason'] ?? null,
+                        'error' => $errorMsg,
+                    ];
+
+                    $batchResults[] = [
+                        'query' => $entry['query'],
+                        'error' => "{$errorMsg} Available tables: {$availableTables}.",
+                    ];
+
+                    continue;
+                }
 
                 $executedSteps[] = [
                     'query' => $entry['query'],
