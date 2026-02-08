@@ -94,6 +94,18 @@ LARAGREP_MAX_ITERATIONS=10
 
 Simple questions typically resolve in 1-2 iterations. Complex analytical questions may need more. Higher values increase capability but also cost (more API calls per question).
 
+### Query Protection
+
+Prevent the AI from accidentally running heavy queries:
+
+```env
+LARAGREP_MAX_ROWS=20
+LARAGREP_MAX_QUERY_TIME=3
+```
+
+- **max_rows** — Automatically injects `LIMIT` into queries that don't have one. Default: `20`. Set to `0` to disable.
+- **max_query_time** — Maximum execution time per query in seconds. Kills slow queries (full table scans, massive joins) before they block the database. Default: `3`. Supports MySQL, MariaDB, PostgreSQL, and SQLite.
+
 ### Smart Schema
 
 For large databases, LaraGrep can make an initial AI call to identify only the tables relevant to the question. The agent loop then runs with a filtered schema, significantly reducing token usage.
@@ -113,7 +125,7 @@ LaraGrep supports three modes for providing table metadata to the AI:
 | Mode     | Env Value | Behavior                                              |
 |----------|-----------|-------------------------------------------------------|
 | manual   | `manual`  | Only use tables defined in config (default)           |
-| auto     | `auto`    | Auto-load from `information_schema` (MySQL/MariaDB)   |
+| auto     | `auto`    | Auto-load from `information_schema` (MySQL/MariaDB/PostgreSQL) |
 | merged   | `merged`  | Auto-load first, then overlay config definitions      |
 
 ```env
@@ -350,10 +362,10 @@ $this->app->singleton(AiClientInterface::class, fn () => new MyCustomClient());
 
 ### Custom Metadata Loader
 
-Implement `LaraGrep\Contracts\MetadataLoaderInterface` for PostgreSQL, SQLite, etc.:
+LaraGrep auto-detects MySQL/MariaDB and PostgreSQL. For other databases (SQLite, SQL Server, etc.), implement `LaraGrep\Contracts\MetadataLoaderInterface`:
 
 ```php
-$this->app->singleton(MetadataLoaderInterface::class, fn ($app) => new PostgresSchemaLoader($app['db']));
+$this->app->singleton(MetadataLoaderInterface::class, fn ($app) => new MySqliteSchemaLoader($app['db']));
 ```
 
 ### Custom Conversation Store
@@ -374,6 +386,8 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_BASE_URL`                 | —                    | Override API endpoint URL            |
 | `LARAGREP_MAX_TOKENS`              | `1024`               | Max response tokens                  |
 | `LARAGREP_MAX_ITERATIONS`          | `10`                 | Max query iterations per question    |
+| `LARAGREP_MAX_ROWS`               | `20`                 | Max rows per query (auto LIMIT)      |
+| `LARAGREP_MAX_QUERY_TIME`         | `3`                  | Max query execution time in seconds  |
 | `LARAGREP_SMART_SCHEMA`           | —                    | Table count threshold for smart filtering |
 | `LARAGREP_SCHEMA_MODE`             | `manual`             | Schema loading mode                  |
 | `LARAGREP_USER_LANGUAGE`           | `en`                 | AI response language                 |

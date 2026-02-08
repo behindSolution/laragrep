@@ -19,6 +19,7 @@ class PromptBuilder
             . PHP_EOL . '- Write the "summary" in the user\'s language.'
             . PHP_EOL . '- After receiving query results, analyze them and decide: run more queries if needed, or provide the final answer.'
             . PHP_EOL . '- Do not mention SQL, queries, bindings, or technical terms in the final summary. Give a clear, business-oriented answer.'
+            . PHP_EOL . '- A LIMIT clause is automatically applied to queries without one. If you need more rows, add an explicit LIMIT. For counting, always use COUNT(*) instead of fetching all rows.'
             . PHP_EOL . '- You can use these HTML tags in the summary: table, b, ul, ol, i, td, tr, th, thead, tbody. Do not use markdown.',
             'Question: ' . $question,
         ]);

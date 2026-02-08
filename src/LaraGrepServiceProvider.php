@@ -10,6 +10,7 @@ use LaraGrep\Contracts\ConversationStoreInterface;
 use LaraGrep\Contracts\MetadataLoaderInterface;
 use LaraGrep\Conversation\DatabaseConversationStore;
 use LaraGrep\Metadata\MysqlSchemaLoader;
+use LaraGrep\Metadata\PostgresSchemaLoader;
 use LaraGrep\Monitor\MonitorRecorder;
 use LaraGrep\Monitor\MonitorRepository;
 use LaraGrep\Monitor\MonitorStore;
@@ -53,7 +54,15 @@ class LaraGrepServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(MetadataLoaderInterface::class, function ($app) {
-            return new MysqlSchemaLoader($app['db']);
+            $config = $app['config']->get('laragrep', []);
+            $connectionName = $config['contexts']['default']['connection'] ?? null;
+
+            $driver = $this->resolveDriver($app, $connectionName);
+
+            return match ($driver) {
+                'pgsql' => new PostgresSchemaLoader($app['db']),
+                default => new MysqlSchemaLoader($app['db']),
+            };
         });
 
         $this->app->singleton(ConversationStoreInterface::class, function ($app) {
@@ -85,7 +94,11 @@ class LaraGrepServiceProvider extends ServiceProvider
             $config = $app['config']->get('laragrep', []);
             $defaultConnection = $config['contexts']['default']['connection'] ?? null;
 
-            return new QueryExecutor($defaultConnection);
+            return new QueryExecutor(
+                connectionName: $defaultConnection,
+                maxRows: (int) ($config['max_rows'] ?? 20),
+                maxQueryTime: (int) ($config['max_query_time'] ?? 3),
+            );
         });
 
         $this->app->singleton(LaraGrep::class, function ($app) {
@@ -184,5 +197,16 @@ class LaraGrepServiceProvider extends ServiceProvider
         if (config('laragrep.monitor.enabled', false)) {
             $this->loadRoutesFrom(__DIR__ . '/../routes/monitor.php');
         }
+    }
+
+    private function resolveDriver($app, ?string $connectionName): string
+    {
+        $configRepository = $app['config'];
+
+        if (!is_string($connectionName) || $connectionName === '') {
+            $connectionName = $configRepository->get('database.default', '');
+        }
+
+        return (string) $configRepository->get("database.connections.{$connectionName}.driver", 'mysql');
     }
 }

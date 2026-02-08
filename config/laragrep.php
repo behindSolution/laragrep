@@ -57,6 +57,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Query Protection
+    |--------------------------------------------------------------------------
+    |
+    | max_rows: Automatically injects a LIMIT clause into queries that don't
+    | already have one. Prevents the AI from accidentally fetching millions
+    | of rows. Set to 0 to disable.
+    |
+    | max_query_time: Maximum execution time per query in seconds. Prevents
+    | slow queries (full table scans, massive joins) from blocking the
+    | database. Set to 0 to disable. Supports MySQL, MariaDB, PostgreSQL,
+    | and SQLite.
+    |
+    */
+
+    'max_rows' => (int) env('LARAGREP_MAX_ROWS', 20),
+
+    'max_query_time' => (int) env('LARAGREP_MAX_QUERY_TIME', 3),
+
+    /*
+    |--------------------------------------------------------------------------
     | Smart Schema
     |--------------------------------------------------------------------------
     |
@@ -184,6 +204,24 @@ return [
     */
 
     'debug' => (bool) env('LARAGREP_DEBUG', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | User ID Resolver
+    |--------------------------------------------------------------------------
+    |
+    | A callable that returns the current user ID. Useful for multi-tenancy
+    | with multi-database, where auth()->id() returns a tenant-local ID
+    | that may collide across tenants.
+    |
+    | When null, LaraGrep falls back to auth()->id().
+    |
+    | Example for stancl/tenancy (central user ID):
+    |   'user_id_resolver' => fn () => tenant()?->id . ':' . auth()->id(),
+    |
+    */
+
+    'user_id_resolver' => null,
 
     /*
     |--------------------------------------------------------------------------

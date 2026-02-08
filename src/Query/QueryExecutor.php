@@ -9,6 +9,8 @@ class QueryExecutor
 {
     public function __construct(
         protected ?string $connectionName = null,
+        protected int $maxRows = 20,
+        protected int $maxQueryTime = 3,
     ) {
     }
 
@@ -23,6 +25,8 @@ class QueryExecutor
      */
     public function execute(string $query, array $bindings, bool $debug = false): array
     {
+        $query = $this->applyRowLimit($query);
+
         return $this->usingConnection(function (ConnectionInterface $connection) use ($query, $bindings, $debug) {
             $queries = [];
 
@@ -30,6 +34,8 @@ class QueryExecutor
                 $connection->flushQueryLog();
                 $connection->enableQueryLog();
             }
+
+            $this->applyQueryTimeout($connection);
 
             try {
                 $results = collect($connection->select($query, $bindings))
@@ -55,6 +61,45 @@ class QueryExecutor
                 'queries' => $queries,
             ];
         });
+    }
+
+    /**
+     * Inject a LIMIT clause if the query doesn't already have one.
+     */
+    protected function applyRowLimit(string $query): string
+    {
+        if ($this->maxRows <= 0) {
+            return $query;
+        }
+
+        $normalized = strtolower(preg_replace('/\s+/', ' ', trim($query)));
+
+        if (str_contains($normalized, ' limit ')) {
+            return $query;
+        }
+
+        return rtrim($query, "; \t\n\r") . ' LIMIT ' . $this->maxRows;
+    }
+
+    /**
+     * Set a statement-level timeout on the connection.
+     */
+    protected function applyQueryTimeout(ConnectionInterface $connection): void
+    {
+        if ($this->maxQueryTime <= 0) {
+            return;
+        }
+
+        $driver = $connection->getDriverName();
+        $seconds = $this->maxQueryTime;
+
+        match ($driver) {
+            'mysql' => $connection->statement("SET SESSION MAX_EXECUTION_TIME = " . ($seconds * 1000)),
+            'mariadb' => $connection->statement("SET SESSION max_statement_time = {$seconds}"),
+            'pgsql' => $connection->statement("SET statement_timeout = " . ($seconds * 1000)),
+            'sqlite' => $connection->getPdo()->setAttribute(\PDO::ATTR_TIMEOUT, $seconds),
+            default => null,
+        };
     }
 
     /**

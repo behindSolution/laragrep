@@ -47,13 +47,16 @@ class QueryController extends Controller
             $conversationId = (string) Str::uuid();
         }
 
+        $userIdResolver = config('laragrep.user_id_resolver');
+        $userId = is_callable($userIdResolver) ? $userIdResolver() : auth()->id();
+
         if ($this->recorder !== null) {
             $answer = $this->recorder->answerQuestion(
                 $validated['question'],
                 $debug,
                 $scope,
                 $conversationId,
-                auth()->id(),
+                $userId,
             );
         } else {
             $answer = $this->service->answerQuestion(

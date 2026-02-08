@@ -23,7 +23,7 @@ class MonitorRecorder
         bool $debug = false,
         ?string $scope = null,
         ?string $conversationId = null,
-        ?int $userId = null,
+        string|int|null $userId = null,
     ): array {
         $startTime = microtime(true);
         $error = null;
