@@ -239,6 +239,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Error Message
+    |--------------------------------------------------------------------------
+    |
+    | Message returned to the frontend when an internal error occurs (timeout,
+    | API failure, etc.). The real error is always captured in the monitor.
+    |
+    */
+
+    'error_message' => env('LARAGREP_ERROR_MESSAGE', 'Sorry, something went wrong while processing your question. Please try again.'),
+
+    /*
+    |--------------------------------------------------------------------------
     | User ID Resolver
     |--------------------------------------------------------------------------
     |
