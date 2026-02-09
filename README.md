@@ -1,66 +1,80 @@
-# LaraGrep
+<p align="center">
+  <img src="asset/logo_laragrep.png" alt="LaraGrep" width="400">
+</p>
 
-[![Latest Version](https://img.shields.io/packagist/v/behindsolution/laragrep.svg)](https://packagist.org/packages/behindsolution/laragrep)
-[![Tests](https://github.com/behindSolution/laragrep/actions/workflows/tests.yml/badge.svg)](https://github.com/behindSolution/laragrep/actions/workflows/tests.yml)
+<p align="center">
+  <a href="https://packagist.org/packages/behindsolution/laragrep"><img src="https://img.shields.io/packagist/v/behindsolution/laragrep.svg" alt="Latest Version"></a>
+  <a href="https://github.com/behindSolution/laragrep/actions/workflows/tests.yml"><img src="https://github.com/behindSolution/laragrep/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+</p>
 
-Transform natural language questions into safe, parameterized SQL SELECT queries using OpenAI or Anthropic. LaraGrep uses an **agent loop** — the AI executes queries one at a time, sees the results, and iteratively reasons until it can provide a final answer.
+<p align="center">
+  Transform natural language questions into safe, parameterized SQL queries using AI.<br>
+  LaraGrep uses an <strong>agent loop</strong> — the AI executes queries, sees the results,<br>
+  and iteratively reasons until it can provide a final answer.
+</p>
 
-## Requirements
+---
 
-- PHP 8.1+
-- Laravel 10, 11, or 12
-- An OpenAI or Anthropic API key
+## Quick Start
 
-## Installation
+### 1. Install
 
 ```bash
 composer require behindsolution/laragrep
 ```
 
-Publish the configuration file:
+### 2. Publish config and migrations
 
 ```bash
 php artisan vendor:publish --tag=laragrep-config
+php artisan vendor:publish --tag=laragrep-migrations
 ```
 
-Run the migrations (creates the `laragrep_conversations` and `laragrep_logs` tables):
+### 3. Create the SQLite database and run migrations
+
+LaraGrep stores conversations, monitor logs, and recipes in a separate SQLite database by default, keeping everything isolated from your main database.
+
+Create the file and run migrations:
+
+```bash
+# Linux / macOS
+touch database/laragrep.sqlite
+
+# Windows
+type nul > database\laragrep.sqlite
+```
+
+Add a `laragrep` connection to your `config/database.php`:
+
+```php
+'connections' => [
+    // ... your existing connections
+
+    'laragrep' => [
+        'driver' => 'sqlite',
+        'database' => database_path('laragrep.sqlite'),
+        'foreign_key_constraints' => true,
+    ],
+],
+```
+
+Then point LaraGrep to it in your `.env`:
+
+```env
+LARAGREP_CONVERSATION_CONNECTION=laragrep
+LARAGREP_MONITOR_CONNECTION=laragrep
+LARAGREP_RECIPES_CONNECTION=laragrep
+```
+
+Run the migrations:
 
 ```bash
 php artisan migrate
 ```
 
-> **Using a dedicated SQLite connection?** Create the file first: `touch database/laragrep.sqlite`
->
-> To publish the migration files for customization: `php artisan vendor:publish --tag=laragrep-migrations`
+> Already using SQLite as your main database? You can skip the connection setup — LaraGrep will use the default `sqlite` connection as-is.
 
-## How It Works
-
-Unlike simple text-to-SQL tools, LaraGrep uses an **agent loop**:
-
-1. You ask a question in natural language
-2. The AI analyzes the schema and decides which query to run
-3. LaraGrep validates and executes the query safely
-4. The AI sees the results and decides: run another query, or provide the final answer
-5. Repeat until the AI has enough data to answer (up to `max_iterations`)
-
-This means the AI can:
-- Build on previous query results to answer complex questions
-- Self-correct if a query returns unexpected data
-- Break down complex analysis into multiple steps
-- Batch independent queries** in a single iteration to save API calls
-
-```
-"How many users and how many orders do I have?"
-
-  → AI: Sends 2 queries in one batch (independent)        (1 API call)
-  → AI: Sees both results, provides the final answer       (1 API call)
-```
-
-## Configuration
-
-### API Key & Provider
-
-Set these in your `.env`:
+### 4. Add your API key to `.env`
 
 ```env
 LARAGREP_PROVIDER=openai
@@ -68,7 +82,124 @@ LARAGREP_API_KEY=sk-...
 LARAGREP_MODEL=gpt-4o-mini
 ```
 
-For Anthropic:
+### 5. Define your tables in `config/laragrep.php`
+
+```php
+use LaraGrep\Config\Table;
+use LaraGrep\Config\Column;
+use LaraGrep\Config\Relationship;
+
+'contexts' => [
+    'default' => [
+        // ...
+        'tables' => [
+            Table::make('users')
+                ->description('Registered users.')
+                ->columns([
+                    Column::id(),
+                    Column::string('name'),
+                    Column::string('email'),
+                    Column::timestamp('created_at'),
+                ]),
+
+            Table::make('orders')
+                ->description('Customer orders.')
+                ->columns([
+                    Column::id(),
+                    Column::bigInteger('user_id')->unsigned(),
+                    Column::decimal('total', 10, 2),
+                    Column::enum('status', ['pending', 'paid', 'cancelled']),
+                    Column::timestamp('created_at'),
+                ])
+                ->relationships([
+                    Relationship::belongsTo('users', 'user_id'),
+                ]),
+        ],
+    ],
+],
+```
+
+### 6. Ask your first question
+
+```bash
+curl -X POST http://localhost/laragrep \
+  -H "Content-Type: application/json" \
+  -d '{"question": "How many users registered this week?"}'
+```
+
+```json
+{
+    "summary": "There were 42 new registrations this week.",
+    "conversation_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+That's it. LaraGrep validates, executes, and answers automatically.
+
+---
+
+## Monitor
+
+LaraGrep includes a built-in monitoring dashboard. Enable it to track every query, error, token usage, and performance metric.
+
+### Enable
+
+```env
+LARAGREP_MONITOR_ENABLED=true
+```
+
+Access the dashboard at **`GET /laragrep/monitor`**:
+
+- **Logs** — Filterable list of all queries with status, duration, iterations, and token estimates
+- **Overview** — Aggregate stats: success rate, errors, token usage, daily charts, top scopes
+- **Detail** — Full agent loop trace for each query: SQL, bindings, results, AI reasoning
+
+Protect it with middleware:
+
+```php
+// config/laragrep.php
+'monitor' => [
+    'enabled' => true,
+    'middleware' => ['auth:sanctum'],
+],
+```
+
+---
+
+## How It Works
+
+Unlike simple text-to-SQL tools, LaraGrep uses an **agent loop**:
+
+1. You ask a question in natural language
+2. The AI analyzes the schema and decides which queries to run
+3. LaraGrep validates and executes the queries safely
+4. The AI sees the results and decides: run more queries, or provide the final answer
+5. Repeat until the AI has enough data to answer (up to `max_iterations`)
+
+This means the AI can build on previous results, self-correct, break down complex analysis into steps, and batch independent queries in a single iteration.
+
+```
+"How many users and how many orders do I have?"
+
+  -> AI: Sends 2 queries in one batch (independent)        (1 API call)
+  -> AI: Sees both results, provides the final answer       (1 API call)
+```
+
+---
+
+## Configuration
+
+### AI Provider
+
+**OpenAI:**
+
+```env
+LARAGREP_PROVIDER=openai
+LARAGREP_API_KEY=sk-...
+LARAGREP_MODEL=gpt-4o-mini
+```
+
+**Anthropic:**
 
 ```env
 LARAGREP_PROVIDER=anthropic
@@ -76,7 +207,7 @@ LARAGREP_API_KEY=sk-ant-...
 LARAGREP_MODEL=claude-sonnet-4-20250514
 ```
 
-For Ollama (local models):
+**Ollama (local):**
 
 ```env
 LARAGREP_PROVIDER=openai
@@ -85,91 +216,55 @@ LARAGREP_MODEL=qwen3-coder:30b
 LARAGREP_BASE_URL=http://localhost:11434/v1/chat/completions
 ```
 
-Ollama exposes an OpenAI-compatible API, so it works with the `openai` provider. The API key can be any non-empty string — Ollama does not validate it. This keeps your data fully local, with no external API calls.
-
-### Agent Loop
-
-Control how many query iterations the AI can perform per question:
-
-```env
-LARAGREP_MAX_ITERATIONS=10
-```
-
-Simple questions typically resolve in 1-2 iterations. Complex analytical questions may need more. Higher values increase capability but also cost (more API calls per question).
-
-### Query Protection
-
-Prevent the AI from accidentally running heavy queries:
-
-```env
-LARAGREP_MAX_ROWS=20
-LARAGREP_MAX_QUERY_TIME=3
-```
-
-- **max_rows** — Automatically injects `LIMIT` into queries that don't have one. Default: `20`. Set to `0` to disable.
-- **max_query_time** — Maximum execution time per query in seconds. Kills slow queries (full table scans, massive joins) before they block the database. Default: `3`. Supports MySQL, MariaDB, PostgreSQL, and SQLite.
-
-### Smart Schema
-
-For large databases, LaraGrep can make an initial AI call to identify only the tables relevant to the question. The agent loop then runs with a filtered schema, significantly reducing token usage.
-
-```env
-LARAGREP_SMART_SCHEMA=20
-```
-
-When set to a number (e.g., `20`), smart schema activates automatically when the total table count reaches that threshold. Set to `null` (default) to disable. Can also be overridden per context.
-
-With 200 tables and only 5 relevant, this reduces token usage by ~60% across the agent loop iterations.
+Ollama exposes an OpenAI-compatible API, so it works with the `openai` provider. The API key can be any non-empty string. This keeps your data fully local.
 
 ### Schema Loading Mode
 
-LaraGrep supports three modes for providing table metadata to the AI:
-
-| Mode     | Env Value | Behavior                                              |
-|----------|-----------|-------------------------------------------------------|
-| manual   | `manual`  | Only use tables defined in config (default)           |
-| auto     | `auto`    | Auto-load from `information_schema` (MySQL/MariaDB/PostgreSQL) |
-| merged   | `merged`  | Auto-load first, then overlay config definitions      |
+| Mode     | Behavior                                              |
+|----------|-------------------------------------------------------|
+| `manual` | Only use tables defined in config (default)           |
+| `auto`   | Auto-load from `information_schema` (MySQL/MariaDB/PostgreSQL) |
+| `merged` | Auto-load first, then overlay config definitions      |
 
 ```env
 LARAGREP_SCHEMA_MODE=manual
 ```
 
-- **manual** is the safest default — no accidental schema exposure.
+- **manual** is the safest — no accidental schema exposure.
 - **auto** is ideal for quick setup when all tables are fair game.
-- **merged** lets you auto-load and then add descriptions, relationships, or virtual tables on top.
+- **merged** lets you auto-load and then add descriptions, relationships, or extra tables on top.
 
 ### Table Definitions
 
-Define your tables in `config/laragrep.php` using fluent classes with IDE autocomplete:
+Define tables using fluent classes with IDE autocomplete:
 
 ```php
 use LaraGrep\Config\Table;
 use LaraGrep\Config\Column;
 use LaraGrep\Config\Relationship;
 
-'tables' => [
-    Table::make('orders')
-        ->description('Customer orders.')
-        ->columns([
-            Column::id(),
-            Column::bigInteger('user_id')->unsigned()->description('FK to users.id.'),
-            Column::decimal('total', 10, 2)->description('Order total.'),
-            Column::enum('status', ['pending', 'paid', 'cancelled']),
-            Column::json('metadata')
-                ->description('Order metadata')
-                ->template(['shipping_method' => 'express', 'tracking_code' => 'BR123456789']),
-            Column::timestamp('created_at'),
-        ])
-        ->relationships([
-            Relationship::belongsTo('users', 'user_id'),
-        ]),
-],
+Table::make('orders')
+    ->description('Customer orders.')
+    ->columns([
+        Column::id(),
+        Column::bigInteger('user_id')->unsigned()->description('FK to users.id.'),
+        Column::decimal('total', 10, 2)->description('Order total.'),
+        Column::enum('status', ['pending', 'paid', 'cancelled']),
+        Column::json('metadata')
+            ->description('Order metadata')
+            ->template(['shipping_method' => 'express', 'tracking_code' => 'BR123456789']),
+        Column::timestamp('created_at'),
+    ])
+    ->relationships([
+        Relationship::belongsTo('users', 'user_id'),
+    ]),
 ```
 
-The `Column` class supports the same types as Laravel migrations: `id()`, `bigInteger()`, `integer()`, `smallInteger()`, `tinyInteger()`, `string()`, `text()`, `decimal()`, `float()`, `boolean()`, `date()`, `dateTime()`, `timestamp()`, `json()`, `enum()`. Modifiers: `->unsigned()`, `->nullable()`, `->description()`.
+**Supported column types:** `id()`, `bigInteger()`, `integer()`, `smallInteger()`, `tinyInteger()`, `string()`, `text()`, `decimal()`, `float()`, `boolean()`, `date()`, `dateTime()`, `timestamp()`, `json()`, `enum()`.
 
-For JSON columns, `->template()` provides an example structure so the AI knows how to query it with `JSON_EXTRACT`.
+**Modifiers:** `->unsigned()`, `->nullable()`, `->description()`.
+
+For JSON columns, `->template()` provides an example structure so the AI knows how to query with `JSON_EXTRACT`.
 
 #### Organizing Large Schemas
 
@@ -202,8 +297,6 @@ class OrdersTable
 }
 ```
 
-Then import them in your config:
-
 ```php
 // config/laragrep.php
 'tables' => [
@@ -213,11 +306,9 @@ Then import them in your config:
 ],
 ```
 
-When using **auto** or **merged** mode, table and column comments from your database are automatically used as descriptions.
-
 ### Named Scopes (Contexts)
 
-Work with multiple databases or table sets by defining named contexts:
+Work with multiple databases or table sets:
 
 ```php
 'contexts' => [
@@ -236,9 +327,37 @@ Work with multiple databases or table sets by defining named contexts:
 
 Select a scope via the URL: `POST /laragrep/analytics`
 
+### Query Protection
+
+```env
+LARAGREP_MAX_ROWS=20
+LARAGREP_MAX_QUERY_TIME=3
+```
+
+- **max_rows** — Automatically injects `LIMIT` into queries that don't have one. Default: `20`. Set to `0` to disable.
+- **max_query_time** — Maximum execution time per query in seconds. Kills slow queries before they block the database. Default: `3`. Supports MySQL, MariaDB, PostgreSQL, and SQLite.
+
+### Agent Loop
+
+```env
+LARAGREP_MAX_ITERATIONS=10
+```
+
+Simple questions typically resolve in 1-2 iterations. Complex analytical questions may need more. Higher values increase capability but also cost.
+
+### Smart Schema
+
+For large databases, LaraGrep can make an initial AI call to identify only the relevant tables, reducing token usage across all iterations.
+
+```env
+LARAGREP_SMART_SCHEMA=20
+```
+
+Activates automatically when the table count reaches the threshold. With 200 tables and only 5 relevant, this reduces token usage by ~60%.
+
 ### Conversation Persistence
 
-LaraGrep supports multi-turn conversations out of the box. When enabled, previous questions and answers are sent as context so the AI can handle follow-up questions.
+Multi-turn conversations are enabled by default. Previous questions and answers are sent as context for follow-ups.
 
 ```env
 LARAGREP_CONVERSATION_ENABLED=true
@@ -249,14 +368,14 @@ LARAGREP_CONVERSATION_RETENTION_DAYS=10
 
 ### Route Protection
 
-Add authentication middleware in your config:
-
 ```php
 'route' => [
     'prefix' => 'laragrep',
     'middleware' => ['auth:sanctum'],
 ],
 ```
+
+---
 
 ## Usage
 
@@ -266,7 +385,7 @@ Add authentication middleware in your config:
 POST /laragrep/{scope?}
 ```
 
-**cURL example:**
+**Basic request:**
 
 ```bash
 curl -X POST http://localhost/laragrep \
@@ -274,7 +393,7 @@ curl -X POST http://localhost/laragrep \
   -d '{"question": "How many users registered this week?"}'
 ```
 
-With authentication and options:
+**With authentication and options:**
 
 ```bash
 curl -X POST http://localhost/laragrep \
@@ -287,31 +406,12 @@ curl -X POST http://localhost/laragrep \
   }'
 ```
 
-Using a named scope:
+**Using a named scope:**
 
 ```bash
 curl -X POST http://localhost/laragrep/analytics \
   -H "Content-Type: application/json" \
   -d '{"question": "What are the top 5 products by revenue?"}'
-```
-
-**Request body:**
-
-```json
-{
-    "question": "How many users registered this week?",
-    "conversation_id": "optional-uuid-for-follow-ups",
-    "debug": false
-}
-```
-
-**Response:**
-
-```json
-{
-    "summary": "There were 42 new registrations this week.",
-    "conversation_id": "550e8400-e29b-41d4-a716-446655440000"
-}
 ```
 
 **Debug response** (when `debug: true`):
@@ -328,11 +428,9 @@ curl -X POST http://localhost/laragrep/analytics \
             "reason": "Counting users registered in the current week"
         }
     ],
-    "bindings": ["2025-01-20"],
-    "results": [{"total": 42}],
     "debug": {
         "queries": [
-            {"query": "SELECT COUNT(*) ...", "bindings": [...], "time": 1.23}
+            {"query": "SELECT COUNT(*) ...", "bindings": ["..."], "time": 1.23}
         ],
         "iterations": 1
     }
@@ -354,8 +452,6 @@ $answer = $laraGrep->answerQuestion(
 echo $answer['summary'];
 ```
 
-The `answerQuestion()` method always returns the full response including `summary`, `steps` (agent loop trace), and `debug` (query log with timing). The API endpoint strips `steps` and `debug` unless `"debug": true` is sent in the request.
-
 ### Formatting Results
 
 Use `formatResult()` to transform raw query results into structured formats via AI.
@@ -369,15 +465,15 @@ $result = $laraGrep->formatResult($answer, 'query');
 // [
 //     'title' => 'Weekly Sales by Region',
 //     'headers' => ['Region', 'Total Sales', 'Order Count'],
-//     'query' => 'SELECT r.name as region, SUM(o.total) as total_sales, COUNT(*) as order_count FROM orders o JOIN regions r ON o.region_id = r.id WHERE o.created_at >= ? GROUP BY r.name ORDER BY total_sales DESC',
+//     'query' => 'SELECT r.name as region, SUM(o.total) ... GROUP BY r.name',
 //     'bindings' => ['2026-02-01'],
 // ]
 ```
 
-Returns the SQL itself — no `LIMIT`, no memory constraints. The AI consolidates all exploratory queries into one optimized query. If the queries cannot be consolidated into a single statement, the AI will return the best possible approximation — always validate the result before using in production. Use it with Laravel's streaming tools:
+Returns the SQL itself, no `LIMIT`. Use it with Laravel's streaming tools:
 
 ```php
-// Stream with cursor — zero memory usage
+// Stream with cursor
 foreach (DB::cursor($result['query'], $result['bindings']) as $row) {
     // process row
 }
@@ -388,16 +484,6 @@ DB::table(DB::raw("({$result['query']}) as sub"))
     ->chunk(1000, function ($rows) {
         // process chunk
     });
-
-// Laravel Excel
-use Maatwebsite\Excel\Concerns\FromQuery;
-
-new class($result) implements FromQuery {
-    public function query() {
-        return DB::table(DB::raw("({$this->result['query']}) as sub"))
-            ->setBindings($this->result['bindings']);
-    }
-};
 ```
 
 **Notification format** — ready-to-render content for email, Slack, or webhooks:
@@ -411,13 +497,11 @@ $notification = $laraGrep->formatResult($answer, 'notification');
 // ]
 ```
 
-Three fixed keys: `title`, `html` (for email/web), `text` (for Slack/SMS/logs). The AI handles all formatting — you just inject into your template.
-
 ### Saved Queries (Recipes)
 
-When enabled, LaraGrep auto-saves a "recipe" after each answer — the question, scope, and SQL queries that worked. The response includes a `recipe_id` that the frontend can reference for exports, notifications, or scheduled re-execution.
+Auto-save a "recipe" after each answer — the question, scope, and queries that worked. The response includes a `recipe_id` for exports, notifications, or scheduled re-execution.
 
-#### Enabling
+**Enable:**
 
 ```env
 LARAGREP_RECIPES_ENABLED=true
@@ -425,9 +509,7 @@ LARAGREP_RECIPES_ENABLED=true
 
 After enabling, publish and run the migration for the `laragrep_recipes` table.
 
-#### How It Works
-
-Every API response now includes a `recipe_id`:
+**API response with recipe:**
 
 ```json
 {
@@ -437,9 +519,7 @@ Every API response now includes a `recipe_id`:
 }
 ```
 
-#### Dispatching a Recipe
-
-The frontend can dispatch a recipe for query or notification:
+**Dispatch a recipe:**
 
 ```bash
 curl -X POST http://localhost/laragrep/recipes/42/dispatch \
@@ -451,12 +531,11 @@ The `period` parameter controls timing:
 - `"now"` — immediate execution (default)
 - `"2026-02-10 08:00:00"` — scheduled for a specific date/time
 
-LaraGrep fires a `RecipeDispatched` event and returns `{"status": "dispatched"}`. Your app handles the rest via a listener:
+LaraGrep fires a `RecipeDispatched` event. Your app handles the rest via a listener:
 
 ```php
 // app/Listeners/HandleRecipeDispatch.php
 use LaraGrep\Events\RecipeDispatched;
-use LaraGrep\LaraGrep;
 
 public function handle(RecipeDispatched $event)
 {
@@ -476,9 +555,6 @@ use LaraGrep\Monitor\MonitorRecorder;
 
 public function handle(MonitorRecorder $recorder)
 {
-    // Using MonitorRecorder ensures replays are tracked in the monitor.
-    // When the monitor is disabled, MonitorRecorder resolves to null —
-    // in that case, inject LaraGrep directly instead.
     $answer = $recorder->replayRecipe($this->recipe, $this->userId);
     $result = $recorder->formatResult($answer, $this->format);
 
@@ -486,15 +562,7 @@ public function handle(MonitorRecorder $recorder)
 }
 ```
 
-#### Viewing a Recipe
-
-```bash
-curl http://localhost/laragrep/recipes/42
-```
-
-#### Programmatic Usage
-
-You can also use recipes programmatically without the API:
+**Programmatic usage:**
 
 ```php
 $laraGrep = app(LaraGrep::class);
@@ -505,19 +573,12 @@ $recipe = $laraGrep->extractRecipe($answer, 'Weekly sales by region', 'default')
 
 // Later — replay with fresh data
 $freshAnswer = $laraGrep->replayRecipe($recipe);
-$queryResult = $laraGrep->formatResult($freshAnswer, 'query');
 $notification = $laraGrep->formatResult($freshAnswer, 'notification');
 ```
 
-When the monitor is enabled, use `MonitorRecorder` instead of `LaraGrep` to ensure replays appear in the dashboard:
+When the monitor is enabled, use `MonitorRecorder` instead of `LaraGrep` to ensure replays appear in the dashboard.
 
-```php
-$recorder = app(MonitorRecorder::class);
-$answer = $recorder->replayRecipe($recipe, $userId);
-$result = $recorder->formatResult($answer, 'query');
-```
-
-The recipe stores the question, scope, and the SQL queries that worked — not the results. On replay, the AI adjusts date bindings and parameters automatically, converging in fewer iterations than a fresh question.
+---
 
 ## Extending
 
@@ -531,7 +592,7 @@ $this->app->singleton(AiClientInterface::class, fn () => new MyCustomClient());
 
 ### Custom Metadata Loader
 
-LaraGrep auto-detects MySQL/MariaDB and PostgreSQL. For other databases (SQLite, SQL Server, etc.), implement `LaraGrep\Contracts\MetadataLoaderInterface`:
+LaraGrep auto-detects MySQL/MariaDB and PostgreSQL. For other databases, implement `LaraGrep\Contracts\MetadataLoaderInterface`:
 
 ```php
 $this->app->singleton(MetadataLoaderInterface::class, fn ($app) => new MySqliteSchemaLoader($app['db']));
@@ -545,77 +606,44 @@ Implement `LaraGrep\Contracts\ConversationStoreInterface` for Redis, file-based 
 $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConversationStore());
 ```
 
+---
+
 ## Environment Variables
 
-| Variable                            | Default            | Description                          |
-|-------------------------------------|--------------------|--------------------------------------|
-| `LARAGREP_PROVIDER`                 | `openai`           | AI provider (`openai`, `anthropic`)  |
-| `LARAGREP_API_KEY`                  | —                  | API key for the AI provider          |
-| `LARAGREP_MODEL`                    | `gpt-4o-mini`      | Model identifier                     |
-| `LARAGREP_BASE_URL`                 | —                  | Override API endpoint URL            |
-| `LARAGREP_MAX_TOKENS`              | `1024`             | Max response tokens                  |
-| `LARAGREP_TIMEOUT`                 | `300`              | HTTP timeout in seconds for AI calls |
-| `LARAGREP_MAX_ITERATIONS`          | `10`               | Max query iterations per question    |
-| `LARAGREP_MAX_ROWS`               | `20`               | Max rows per query (auto LIMIT)      |
-| `LARAGREP_MAX_QUERY_TIME`         | `3`                | Max query execution time in seconds  |
-| `LARAGREP_SMART_SCHEMA`           | —                  | Table count threshold for smart filtering |
-| `LARAGREP_SCHEMA_MODE`             | `manual`           | Schema loading mode                  |
-| `LARAGREP_USER_LANGUAGE`           | `en`               | AI response language                 |
-| `LARAGREP_CONNECTION`              | —                  | Database connection name             |
-| `LARAGREP_DATABASE_TYPE`           | —                  | DB type hint for AI (e.g., MySQL 8)  |
-| `LARAGREP_DATABASE_NAME`           | `DB_DATABASE`      | DB name hint for AI                  |
-| `LARAGREP_EXCLUDE_TABLES`          | —                  | Comma-separated tables to hide       |
-| `LARAGREP_DEBUG`                    | `false`            | Enable debug mode                    |
-| `LARAGREP_ROUTE_PREFIX`            | `laragrep`         | API route prefix                     |
-| `LARAGREP_CONVERSATION_ENABLED`    | `true`             | Enable conversation persistence      |
-| `LARAGREP_CONVERSATION_CONNECTION` | `sqlite`           | DB connection for conversations      |
-| `LARAGREP_CONVERSATION_MAX_MESSAGES`| `10`               | Max messages per conversation        |
-| `LARAGREP_CONVERSATION_RETENTION_DAYS`   | `10`               | Auto-delete conversations after days |
-| `LARAGREP_MONITOR_ENABLED`        | `false`            | Enable monitoring dashboard          |
-| `LARAGREP_MONITOR_CONNECTION`     | `sqlite`           | DB connection for monitor logs       |
-| `LARAGREP_MONITOR_TABLE`          | `laragrep_logs`    | Table name for monitor logs          |
-| `LARAGREP_MONITOR_RETENTION_DAYS` | `30`               | Auto-delete logs after days          |
-| `LARAGREP_RECIPES_ENABLED`        | `false`            | Enable recipe auto-save              |
-| `LARAGREP_RECIPES_CONNECTION`     | `sqlite`           | DB connection for recipes            |
-| `LARAGREP_RECIPES_TABLE`          | `laragrep_recipes` | Table name for recipes               |
-| `LARAGREP_RECIPES_RETENTION_DAYS` | `30`               | Auto-delete recipes after days       |
+| Variable | Default | Description |
+|---|---|---|
+| `LARAGREP_PROVIDER` | `openai` | AI provider (`openai`, `anthropic`) |
+| `LARAGREP_API_KEY` | — | API key for the AI provider |
+| `LARAGREP_MODEL` | `gpt-4o-mini` | Model identifier |
+| `LARAGREP_BASE_URL` | — | Override API endpoint URL |
+| `LARAGREP_MAX_TOKENS` | `1024` | Max response tokens |
+| `LARAGREP_TIMEOUT` | `300` | HTTP timeout in seconds |
+| `LARAGREP_MAX_ITERATIONS` | `10` | Max query iterations per question |
+| `LARAGREP_MAX_ROWS` | `20` | Max rows per query (auto LIMIT) |
+| `LARAGREP_MAX_QUERY_TIME` | `3` | Max query execution time (seconds) |
+| `LARAGREP_SMART_SCHEMA` | — | Table count threshold for smart filtering |
+| `LARAGREP_SCHEMA_MODE` | `manual` | Schema loading mode |
+| `LARAGREP_USER_LANGUAGE` | `en` | AI response language |
+| `LARAGREP_CONNECTION` | — | Database connection name |
+| `LARAGREP_DATABASE_TYPE` | — | DB type hint for AI |
+| `LARAGREP_DATABASE_NAME` | `DB_DATABASE` | DB name hint for AI |
+| `LARAGREP_EXCLUDE_TABLES` | — | Comma-separated tables to hide |
+| `LARAGREP_DEBUG` | `false` | Enable debug mode |
+| `LARAGREP_ROUTE_PREFIX` | `laragrep` | API route prefix |
+| `LARAGREP_CONVERSATION_ENABLED` | `true` | Enable conversation persistence |
+| `LARAGREP_CONVERSATION_CONNECTION` | `sqlite` | DB connection for conversations |
+| `LARAGREP_CONVERSATION_MAX_MESSAGES` | `10` | Max messages per conversation |
+| `LARAGREP_CONVERSATION_RETENTION_DAYS` | `10` | Auto-delete conversations after days |
+| `LARAGREP_MONITOR_ENABLED` | `false` | Enable monitoring dashboard |
+| `LARAGREP_MONITOR_CONNECTION` | `sqlite` | DB connection for monitor logs |
+| `LARAGREP_MONITOR_TABLE` | `laragrep_logs` | Table name for monitor logs |
+| `LARAGREP_MONITOR_RETENTION_DAYS` | `30` | Auto-delete logs after days |
+| `LARAGREP_RECIPES_ENABLED` | `false` | Enable recipe auto-save |
+| `LARAGREP_RECIPES_CONNECTION` | `sqlite` | DB connection for recipes |
+| `LARAGREP_RECIPES_TABLE` | `laragrep_recipes` | Table name for recipes |
+| `LARAGREP_RECIPES_RETENTION_DAYS` | `30` | Auto-delete recipes after days |
 
-## Monitor
-
-LaraGrep includes a built-in monitoring dashboard for tracking queries, errors, token usage, and performance. Disabled by default.
-
-### Enabling
-
-```env
-LARAGREP_MONITOR_ENABLED=true
-```
-
-### Dashboard
-
-Access the dashboard at `GET /laragrep/monitor`:
-
-- **Logs** — Filterable list of all queries with status, duration, iterations, and token estimates
-- **Overview** — Aggregate stats: success rate, errors, token usage, daily charts, top scopes, storage metrics
-- **Detail** — Full agent loop trace for each query: SQL, bindings, results, AI reasoning, errors
-
-### Protecting the Dashboard
-
-```php
-'monitor' => [
-    'enabled' => true,
-    'middleware' => ['auth:sanctum'],
-],
-```
-
-### What Gets Tracked
-
-- Question, scope, user ID, conversation ID
-- Status (success/error) with full error details and stack trace
-- Each agent loop step (SQL, bindings, results, AI reasoning)
-- Smart schema filtering (tables total vs filtered)
-- Estimated token usage
-- Response time
-- Raw query log with timing
+---
 
 ## Security
 
