@@ -524,37 +524,38 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 
 ## Environment Variables
 
-| Variable                            | Default              | Description                          |
-|-------------------------------------|----------------------|--------------------------------------|
-| `LARAGREP_PROVIDER`                 | `openai`             | AI provider (`openai`, `anthropic`)  |
-| `LARAGREP_API_KEY`                  | —                    | API key for the AI provider          |
-| `LARAGREP_MODEL`                    | `gpt-4o-mini`        | Model identifier                     |
-| `LARAGREP_BASE_URL`                 | —                    | Override API endpoint URL            |
-| `LARAGREP_MAX_TOKENS`              | `1024`               | Max response tokens                  |
-| `LARAGREP_MAX_ITERATIONS`          | `10`                 | Max query iterations per question    |
-| `LARAGREP_MAX_ROWS`               | `20`                 | Max rows per query (auto LIMIT)      |
-| `LARAGREP_MAX_QUERY_TIME`         | `3`                  | Max query execution time in seconds  |
-| `LARAGREP_SMART_SCHEMA`           | —                    | Table count threshold for smart filtering |
-| `LARAGREP_SCHEMA_MODE`             | `manual`             | Schema loading mode                  |
-| `LARAGREP_USER_LANGUAGE`           | `en`                 | AI response language                 |
-| `LARAGREP_CONNECTION`              | —                    | Database connection name             |
-| `LARAGREP_DATABASE_TYPE`           | —                    | DB type hint for AI (e.g., MySQL 8)  |
-| `LARAGREP_DATABASE_NAME`           | `DB_DATABASE`        | DB name hint for AI                  |
-| `LARAGREP_EXCLUDE_TABLES`          | —                    | Comma-separated tables to hide       |
-| `LARAGREP_DEBUG`                    | `false`              | Enable debug mode                    |
-| `LARAGREP_ROUTE_PREFIX`            | `laragrep`           | API route prefix                     |
-| `LARAGREP_CONVERSATION_ENABLED`    | `true`               | Enable conversation persistence      |
-| `LARAGREP_CONVERSATION_CONNECTION` | `sqlite`             | DB connection for conversations      |
-| `LARAGREP_CONVERSATION_MAX_MESSAGES`| `10`                | Max messages per conversation        |
-| `LARAGREP_CONVERSATION_RETENTION_DAYS`   | `10`                 | Auto-delete conversations after days |
-| `LARAGREP_MONITOR_ENABLED`        | `false`              | Enable monitoring dashboard          |
-| `LARAGREP_MONITOR_CONNECTION`     | `sqlite`             | DB connection for monitor logs       |
-| `LARAGREP_MONITOR_TABLE`          | `laragrep_logs`      | Table name for monitor logs          |
-| `LARAGREP_MONITOR_RETENTION_DAYS` | `30`                 | Auto-delete logs after days          |
-| `LARAGREP_RECIPES_ENABLED`        | `false`              | Enable recipe auto-save              |
-| `LARAGREP_RECIPES_CONNECTION`     | `sqlite`             | DB connection for recipes            |
-| `LARAGREP_RECIPES_TABLE`          | `laragrep_recipes`   | Table name for recipes               |
-| `LARAGREP_RECIPES_RETENTION_DAYS` | `30`                 | Auto-delete recipes after days       |
+| Variable                            | Default            | Description                          |
+|-------------------------------------|--------------------|--------------------------------------|
+| `LARAGREP_PROVIDER`                 | `openai`           | AI provider (`openai`, `anthropic`)  |
+| `LARAGREP_API_KEY`                  | —                  | API key for the AI provider          |
+| `LARAGREP_MODEL`                    | `gpt-4o-mini`      | Model identifier                     |
+| `LARAGREP_BASE_URL`                 | —                  | Override API endpoint URL            |
+| `LARAGREP_MAX_TOKENS`              | `1024`             | Max response tokens                  |
+| `LARAGREP_TIMEOUT`                 | `300`              | HTTP timeout in seconds for AI calls |
+| `LARAGREP_MAX_ITERATIONS`          | `10`               | Max query iterations per question    |
+| `LARAGREP_MAX_ROWS`               | `20`               | Max rows per query (auto LIMIT)      |
+| `LARAGREP_MAX_QUERY_TIME`         | `3`                | Max query execution time in seconds  |
+| `LARAGREP_SMART_SCHEMA`           | —                  | Table count threshold for smart filtering |
+| `LARAGREP_SCHEMA_MODE`             | `manual`           | Schema loading mode                  |
+| `LARAGREP_USER_LANGUAGE`           | `en`               | AI response language                 |
+| `LARAGREP_CONNECTION`              | —                  | Database connection name             |
+| `LARAGREP_DATABASE_TYPE`           | —                  | DB type hint for AI (e.g., MySQL 8)  |
+| `LARAGREP_DATABASE_NAME`           | `DB_DATABASE`      | DB name hint for AI                  |
+| `LARAGREP_EXCLUDE_TABLES`          | —                  | Comma-separated tables to hide       |
+| `LARAGREP_DEBUG`                    | `false`            | Enable debug mode                    |
+| `LARAGREP_ROUTE_PREFIX`            | `laragrep`         | API route prefix                     |
+| `LARAGREP_CONVERSATION_ENABLED`    | `true`             | Enable conversation persistence      |
+| `LARAGREP_CONVERSATION_CONNECTION` | `sqlite`           | DB connection for conversations      |
+| `LARAGREP_CONVERSATION_MAX_MESSAGES`| `10`               | Max messages per conversation        |
+| `LARAGREP_CONVERSATION_RETENTION_DAYS`   | `10`               | Auto-delete conversations after days |
+| `LARAGREP_MONITOR_ENABLED`        | `false`            | Enable monitoring dashboard          |
+| `LARAGREP_MONITOR_CONNECTION`     | `sqlite`           | DB connection for monitor logs       |
+| `LARAGREP_MONITOR_TABLE`          | `laragrep_logs`    | Table name for monitor logs          |
+| `LARAGREP_MONITOR_RETENTION_DAYS` | `30`               | Auto-delete logs after days          |
+| `LARAGREP_RECIPES_ENABLED`        | `false`            | Enable recipe auto-save              |
+| `LARAGREP_RECIPES_CONNECTION`     | `sqlite`           | DB connection for recipes            |
+| `LARAGREP_RECIPES_TABLE`          | `laragrep_recipes` | Table name for recipes               |
+| `LARAGREP_RECIPES_RETENTION_DAYS` | `30`               | Auto-delete recipes after days       |
 
 ## Monitor
 

@@ -14,6 +14,7 @@ class AnthropicClient implements AiClientInterface
         protected int $maxTokens = 1024,
         protected string $baseUrl = 'https://api.anthropic.com/v1/messages',
         protected string $anthropicVersion = '2023-06-01',
+        protected int $timeout = 120,
     ) {
     }
 
@@ -38,7 +39,7 @@ class AnthropicClient implements AiClientInterface
         $response = Http::withHeaders([
             'x-api-key' => $this->apiKey,
             'anthropic-version' => $this->anthropicVersion,
-        ])->post($this->baseUrl, $payload);
+        ])->timeout($this->timeout)->post($this->baseUrl, $payload);
 
         if ($response->failed()) {
             throw new RuntimeException('Anthropic API call failed: ' . $response->body());

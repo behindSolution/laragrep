@@ -34,6 +34,8 @@ class LaraGrepServiceProvider extends ServiceProvider
             $model = (string) ($config['model'] ?? '');
             $baseUrl = $config['base_url'] ?? null;
 
+            $timeout = (int) ($config['timeout'] ?? 120);
+
             return match ($provider) {
                 'anthropic' => new AnthropicClient(
                     apiKey: $apiKey,
@@ -43,6 +45,7 @@ class LaraGrepServiceProvider extends ServiceProvider
                         ? $baseUrl
                         : 'https://api.anthropic.com/v1/messages',
                     anthropicVersion: (string) ($config['anthropic_version'] ?? '2023-06-01'),
+                    timeout: $timeout,
                 ),
                 default => new OpenAiClient(
                     apiKey: $apiKey,
@@ -50,6 +53,7 @@ class LaraGrepServiceProvider extends ServiceProvider
                     baseUrl: is_string($baseUrl) && $baseUrl !== ''
                         ? $baseUrl
                         : 'https://api.openai.com/v1/chat/completions',
+                    timeout: $timeout,
                 ),
             };
         });

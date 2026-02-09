@@ -25,6 +25,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | HTTP Timeout
+    |--------------------------------------------------------------------------
+    |
+    | Maximum time in seconds to wait for AI provider responses. Increase this
+    | when using local models (Ollama, vLLM) that need more time to generate.
+    |
+    */
+
+    'timeout' => (int) env('LARAGREP_TIMEOUT', 300),
+
+    /*
+    |--------------------------------------------------------------------------
     | Schema Loading Mode
     |--------------------------------------------------------------------------
     |

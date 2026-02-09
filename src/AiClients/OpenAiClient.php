@@ -12,12 +12,13 @@ class OpenAiClient implements AiClientInterface
         protected string $apiKey,
         protected string $model = 'gpt-4o-mini',
         protected string $baseUrl = 'https://api.openai.com/v1/chat/completions',
+        protected int $timeout = 120,
     ) {
     }
 
     public function chat(array $messages): AiResponse
     {
-        $response = Http::withToken($this->apiKey)->post($this->baseUrl, [
+        $response = Http::withToken($this->apiKey)->timeout($this->timeout)->post($this->baseUrl, [
             'model' => $this->model,
             'messages' => $messages,
         ]);
