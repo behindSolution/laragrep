@@ -8,6 +8,7 @@ use LaraGrep\AiClients\OpenAiClient;
 use LaraGrep\Contracts\AiClientInterface;
 use LaraGrep\Contracts\ConversationStoreInterface;
 use LaraGrep\Contracts\MetadataLoaderInterface;
+use LaraGrep\Contracts\RecipeStoreInterface;
 use LaraGrep\Conversation\DatabaseConversationStore;
 use LaraGrep\Metadata\MysqlSchemaLoader;
 use LaraGrep\Metadata\PostgresSchemaLoader;
@@ -123,7 +124,7 @@ class LaraGrepServiceProvider extends ServiceProvider
 
         $this->app->singleton(TokenEstimator::class);
 
-        $this->app->singleton(RecipeStore::class, function ($app) {
+        $this->app->singleton(RecipeStoreInterface::class, function ($app) {
             $config = $app['config']->get('laragrep.recipes', []);
 
             if (!is_array($config) || !($config['enabled'] ?? false)) {

@@ -4,8 +4,9 @@ namespace LaraGrep\Recipe;
 
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Carbon;
+use LaraGrep\Contracts\RecipeStoreInterface;
 
-class RecipeStore
+class RecipeStore implements RecipeStoreInterface
 {
     public function __construct(
         protected ConnectionInterface $connection,

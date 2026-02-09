@@ -6,9 +6,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Str;
+use LaraGrep\Contracts\RecipeStoreInterface;
 use LaraGrep\LaraGrep;
 use LaraGrep\Monitor\MonitorRecorder;
-use LaraGrep\Recipe\RecipeStore;
 use Throwable;
 
 class QueryController extends Controller
@@ -16,7 +16,7 @@ class QueryController extends Controller
     public function __construct(
         protected LaraGrep $service,
         protected ?MonitorRecorder $recorder = null,
-        protected ?RecipeStore $recipeStore = null,
+        protected ?RecipeStoreInterface $recipeStore = null,
     ) {
     }
 

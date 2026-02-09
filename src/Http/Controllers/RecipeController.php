@@ -5,13 +5,13 @@ namespace LaraGrep\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use LaraGrep\Contracts\RecipeStoreInterface;
 use LaraGrep\Events\RecipeDispatched;
-use LaraGrep\Recipe\RecipeStore;
 
 class RecipeController extends Controller
 {
     public function __construct(
-        protected RecipeStore $store,
+        protected RecipeStoreInterface $store,
     ) {
     }
 
