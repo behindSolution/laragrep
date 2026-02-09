@@ -23,17 +23,13 @@ class QueryExecutor
      * @param  array<int, mixed>  $bindings
      * @return array{results: array<int, array<string, mixed>>, queries: array<int, array<string, mixed>>}
      */
-    public function execute(string $query, array $bindings, bool $debug = false): array
+    public function execute(string $query, array $bindings): array
     {
         $query = $this->applyRowLimit($query);
 
-        return $this->usingConnection(function (ConnectionInterface $connection) use ($query, $bindings, $debug) {
-            $queries = [];
-
-            if ($debug) {
-                $connection->flushQueryLog();
-                $connection->enableQueryLog();
-            }
+        return $this->usingConnection(function (ConnectionInterface $connection) use ($query, $bindings) {
+            $connection->flushQueryLog();
+            $connection->enableQueryLog();
 
             $this->applyQueryTimeout($connection);
 
@@ -42,18 +38,16 @@ class QueryExecutor
                     ->map(fn($row) => (array) $row)
                     ->all();
             } finally {
-                if ($debug) {
-                    $queries = collect($connection->getQueryLog())
-                        ->map(fn(array $entry) => [
-                            'query' => $entry['query'] ?? '',
-                            'bindings' => $entry['bindings'] ?? [],
-                            'time' => $entry['time'] ?? null,
-                        ])
-                        ->all();
+                $queries = collect($connection->getQueryLog())
+                    ->map(fn(array $entry) => [
+                        'query' => $entry['query'] ?? '',
+                        'bindings' => $entry['bindings'] ?? [],
+                        'time' => $entry['time'] ?? null,
+                    ])
+                    ->all();
 
-                    $connection->disableQueryLog();
-                    $connection->flushQueryLog();
-                }
+                $connection->disableQueryLog();
+                $connection->flushQueryLog();
             }
 
             return [

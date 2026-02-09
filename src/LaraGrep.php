@@ -32,7 +32,6 @@ class LaraGrep
 
     public function answerQuestion(
         string $question,
-        bool $debug = false,
         ?string $scope = null,
         ?string $conversationId = null,
     ): array {
@@ -50,10 +49,7 @@ class LaraGrep
         $tables = $this->applySmartSchema($tables, $question, $scopeConfig);
         $this->lastSchemaStats = ['total' => $tablesTotal, 'filtered' => count($tables)];
 
-        $knownTables = array_values(array_filter(array_map(
-            fn(array $t) => strtolower($t['name'] ?? ''),
-            $tables
-        )));
+        $knownTables = $this->extractKnownTables($tables);
 
         $conversationId = $this->normalizeId($conversationId);
         $history = [];
@@ -70,6 +66,132 @@ class LaraGrep
             conversationHistory: $history,
         );
 
+        $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage);
+
+        if ($conversationId !== null && $this->conversationStore !== null) {
+            $this->conversationStore->appendExchange($conversationId, $question, $result['summary']);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Extract a reusable recipe from an answer for future replay.
+     *
+     * @param  array  $answer  The full answer from answerQuestion()
+     * @param  string  $question  The original question
+     * @param  string|null  $scope  The scope used
+     */
+    public function extractRecipe(array $answer, string $question, ?string $scope = null): array
+    {
+        $steps = $answer['steps'] ?? [];
+        $queries = [];
+
+        foreach ($steps as $step) {
+            if (isset($step['error']) || empty($step['results'])) {
+                continue;
+            }
+
+            $queries[] = [
+                'query' => $step['query'] ?? '',
+                'bindings' => $step['bindings'] ?? [],
+                'reason' => $step['reason'] ?? null,
+            ];
+        }
+
+        return [
+            'question' => $question,
+            'scope' => $scope ?? 'default',
+            'queries' => $queries,
+        ];
+    }
+
+    /**
+     * Replay a saved recipe with fresh data.
+     * The AI receives the previous queries as context and adjusts parameters
+     * (dates, filters) for the current execution, skipping the exploration phase.
+     *
+     * @param  array  $recipe  Recipe from extractRecipe()
+     */
+    public function replayRecipe(array $recipe): array
+    {
+        $this->lastPromptTokens = 0;
+        $this->lastCompletionTokens = 0;
+
+        $question = $recipe['question'] ?? '';
+        $scope = $recipe['scope'] ?? 'default';
+        $previousQueries = $recipe['queries'] ?? [];
+
+        $scopeConfig = $this->resolveScopeConfig($scope);
+        $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
+        $maxIterations = (int) ($this->config['max_iterations'] ?? 10);
+
+        $this->queryExecutor->setConnection($scopeConfig['connection'] ?? null);
+
+        $tables = $this->resolveMetadata($scopeConfig);
+        $tablesTotal = count($tables);
+        $this->lastSchemaStats = ['total' => $tablesTotal, 'filtered' => $tablesTotal];
+
+        $knownTables = $this->extractKnownTables($tables);
+
+        $messages = $this->promptBuilder->buildReplayMessages(
+            question: $question,
+            tables: $tables,
+            previousQueries: $previousQueries,
+            userLanguage: $userLanguage,
+            database: $scopeConfig['database'] ?? null,
+            customSystemPrompt: $this->config['system_prompt'] ?? null,
+        );
+
+        return $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage);
+    }
+
+    /**
+     * Transform raw answer data into a structured format using AI.
+     *
+     * @param  array  $answer  The full answer from answerQuestion() or replayRecipe()
+     * @param  string  $format  'export' or 'notification'
+     * @return array  Structured data ready for consumption
+     */
+    public function formatResult(array $answer, string $format): array
+    {
+        $steps = $answer['steps'] ?? [];
+        $summary = $answer['summary'] ?? '';
+        $userLanguage = $this->config['user_language'] ?? 'en';
+
+        $messages = match ($format) {
+            'export' => $this->promptBuilder->buildFormatExportMessages($steps, $summary, $userLanguage),
+            'notification' => $this->promptBuilder->buildFormatNotificationMessages($steps, $summary, $userLanguage),
+            default => throw new RuntimeException("Unsupported format: {$format}. Use 'export' or 'notification'."),
+        };
+
+        $aiResponse = $this->aiClient->chat($messages);
+        $this->lastPromptTokens += $aiResponse->promptTokens;
+        $this->lastCompletionTokens += $aiResponse->completionTokens;
+
+        $content = trim($aiResponse->content);
+        $content = preg_replace('/^```(?:json)?\s*/im', '', $content);
+        $content = preg_replace('/\s*```\s*$/m', '', $content);
+        $content = trim($content);
+
+        $decoded = json_decode($content, true);
+
+        if (!is_array($decoded)) {
+            throw new RuntimeException('AI returned invalid JSON for format transformation.');
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Run the agent loop: AI decides queries, executes them, iterates until answer.
+     */
+    protected function runAgentLoop(
+        array $messages,
+        array $knownTables,
+        int $maxIterations,
+        string $userLanguage,
+    ): array {
         $executedSteps = [];
         $debugQueries = [];
         $summary = null;
@@ -83,7 +205,6 @@ class LaraGrep
             try {
                 $action = $this->responseParser->parseAction($response);
             } catch (RuntimeException) {
-                // If parsing fails, treat the raw response as the final answer
                 $summary = trim($response) ?: 'Sorry, I could not process your question.';
                 break;
             }
@@ -93,13 +214,12 @@ class LaraGrep
                 break;
             }
 
-            // action === 'query' — execute all queries in the batch
             $batchResults = [];
 
             foreach ($action['queries'] as $entry) {
                 try {
                     $this->queryValidator->validate($entry['query'], $knownTables);
-                    $execution = $this->queryExecutor->execute($entry['query'], $entry['bindings'], $debug);
+                    $execution = $this->queryExecutor->execute($entry['query'], $entry['bindings']);
                 } catch (RuntimeException $e) {
                     $errorMsg = $e->getMessage();
                     $availableTables = implode(', ', $knownTables);
@@ -132,12 +252,9 @@ class LaraGrep
                     'results' => $execution['results'],
                 ];
 
-                if ($debug) {
-                    $debugQueries = array_merge($debugQueries, $execution['queries']);
-                }
+                $debugQueries = array_merge($debugQueries, $execution['queries']);
             }
 
-            // Feed the AI's response and all query results back into the conversation
             $messages[] = ['role' => 'assistant', 'content' => $response];
             $messages[] = [
                 'role' => 'user',
@@ -148,7 +265,6 @@ class LaraGrep
             ];
         }
 
-        // If the loop exhausted iterations without an answer, force one
         if ($summary === null) {
             $messages[] = $this->promptBuilder->buildForceAnswerMessage($userLanguage);
 
@@ -167,29 +283,14 @@ class LaraGrep
             }
         }
 
-        if ($conversationId !== null && $this->conversationStore !== null) {
-            $this->conversationStore->appendExchange($conversationId, $question, $summary);
-        }
-
-        $answer = ['summary' => $summary];
-
-        if ($debug) {
-            $answer['steps'] = $executedSteps;
-
-            if ($executedSteps !== []) {
-                $answer['bindings'] = $executedSteps[0]['bindings'];
-                $answer['results'] = $executedSteps[0]['results'];
-            } else {
-                $answer['results'] = [];
-            }
-
-            $answer['debug'] = [
+        return [
+            'summary' => $summary,
+            'steps' => $executedSteps,
+            'debug' => [
                 'queries' => $debugQueries,
                 'iterations' => count($executedSteps),
-            ];
-        }
-
-        return $answer;
+            ],
+        ];
     }
 
     protected function resolveScopeConfig(?string $scope): array
@@ -205,8 +306,6 @@ class LaraGrep
     }
 
     /**
-     * Resolve table metadata based on schema_mode setting.
-     *
      * @return array<int, array{name: string, description: string, columns: array}>
      */
     protected function resolveMetadata(array $scopeConfig): array
@@ -249,7 +348,6 @@ class LaraGrep
             return $autoTables;
         }
 
-        // 'merged': auto-loaded as base, config overlays on top
         if ($configTables === []) {
             return $autoTables;
         }
@@ -279,9 +377,6 @@ class LaraGrep
     }
 
     /**
-     * Filter tables to only those relevant to the question using an AI recognition call.
-     * Activated when smart_schema is configured and table count exceeds the threshold.
-     *
      * @return array<int, array{name: string, description: string, columns: array}>
      */
     protected function applySmartSchema(array $tables, string $question, array $scopeConfig): array
@@ -319,6 +414,14 @@ class LaraGrep
         ));
 
         return $filtered !== [] ? $filtered : $tables;
+    }
+
+    protected function extractKnownTables(array $tables): array
+    {
+        return array_values(array_filter(array_map(
+            fn(array $t) => strtolower($t['name'] ?? ''),
+            $tables
+        )));
     }
 
     public function getLastSchemaStats(): array

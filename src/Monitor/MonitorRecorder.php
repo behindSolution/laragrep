@@ -20,18 +20,65 @@ class MonitorRecorder
 
     public function answerQuestion(
         string $question,
-        bool $debug = false,
         ?string $scope = null,
         ?string $conversationId = null,
         string|int|null $userId = null,
+    ): array {
+        return $this->recordExecution(
+            fn () => $this->laraGrep->answerQuestion($question, $scope, $conversationId),
+            $question,
+            $scope,
+            $conversationId,
+            $userId,
+            'query',
+        );
+    }
+
+    public function replayRecipe(
+        array $recipe,
+        string|int|null $userId = null,
+    ): array {
+        return $this->recordExecution(
+            fn () => $this->laraGrep->replayRecipe($recipe),
+            $recipe['question'] ?? '',
+            $recipe['scope'] ?? 'default',
+            null,
+            $userId,
+            'replay',
+        );
+    }
+
+    public function formatResult(
+        array $answer,
+        string $format,
+    ): array {
+        $result = $this->laraGrep->formatResult($answer, $format);
+
+        // Token usage from formatResult is accumulated in LaraGrep
+        // No separate monitoring entry — it's a lightweight formatting call
+
+        return $result;
+    }
+
+    public function getLaraGrep(): LaraGrep
+    {
+        return $this->laraGrep;
+    }
+
+    protected function recordExecution(
+        callable $operation,
+        string $question,
+        ?string $scope,
+        ?string $conversationId,
+        string|int|null $userId,
+        string $type,
     ): array {
         $startTime = microtime(true);
         $error = null;
         $answer = [];
 
         try {
-            // Always capture debug data internally for monitoring
-            $answer = $this->laraGrep->answerQuestion($question, true, $scope, $conversationId);
+            $answer = $operation();
         } catch (Throwable $e) {
             $error = $e;
         } finally {
@@ -42,7 +89,7 @@ class MonitorRecorder
 
             try {
                 $this->store->record([
-                    'question' => mb_substr($question, 0, 1000),
+                    'question' => mb_substr(($type === 'replay' ? '[Replay] ' : '') . $question, 0, 1000),
                     'scope' => $scope ?? 'default',
                     'model' => $this->model ?: null,
                     'provider' => $this->provider ?: null,
@@ -64,17 +111,12 @@ class MonitorRecorder
                     'debug_queries' => json_encode($answer['debug']['queries'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 ]);
             } catch (Throwable) {
-                // Monitoring must never break the actual query
+                // Monitoring must never break the actual operation
             }
         }
 
         if ($error) {
             throw $error;
-        }
-
-        // Strip debug data if the caller didn't request it
-        if (!$debug) {
-            unset($answer['steps'], $answer['bindings'], $answer['results'], $answer['debug']);
         }
 
         return $answer;

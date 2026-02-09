@@ -341,14 +341,160 @@ curl -X POST http://localhost/laragrep/analytics \
 ```php
 use LaraGrep\LaraGrep;
 
-$answer = app(LaraGrep::class)->answerQuestion(
+$laraGrep = app(LaraGrep::class);
+
+$answer = $laraGrep->answerQuestion(
     question: 'How many orders were placed today?',
-    debug: false,
     scope: 'default',
 );
 
 echo $answer['summary'];
 ```
+
+The `answerQuestion()` method always returns the full response including `summary`, `steps` (agent loop trace), and `debug` (query log with timing). The API endpoint strips `steps` and `debug` unless `"debug": true` is sent in the request.
+
+### Formatting Results
+
+Use `formatResult()` to transform raw query results into structured formats via AI. This is useful for building exports, notifications, or reports programmatically.
+
+**Export format** — tabular data for spreadsheets:
+
+```php
+$answer = $laraGrep->answerQuestion('Top 10 products by revenue');
+
+$tables = $laraGrep->formatResult($answer, 'export');
+// [
+//     [
+//         'title' => 'Top 10 Products by Revenue',
+//         'headers' => ['Product', 'Revenue', 'Units Sold'],
+//         'rows' => [
+//             ['Widget Pro', 45230.00, 890],
+//             ['Gadget X', 38100.50, 650],
+//         ],
+//     ],
+// ]
+```
+
+The structure is always `title`, `headers`, `rows` — feed it into any CSV, XLSX, or PDF library.
+
+**Notification format** — ready-to-render content for email, Slack, or webhooks:
+
+```php
+$notification = $laraGrep->formatResult($answer, 'notification');
+// [
+//     'title' => 'Weekly Sales Report',
+//     'html' => '<p>Sales this week totaled...</p><table>...</table>',
+//     'text' => 'Sales this week totaled...\nProduct | Revenue...',
+// ]
+```
+
+Three fixed keys: `title`, `html` (for email/web), `text` (for Slack/SMS/logs). The AI handles all formatting — you just inject into your template.
+
+### Saved Queries (Recipes)
+
+When enabled, LaraGrep auto-saves a "recipe" after each answer — the question, scope, and SQL queries that worked. The response includes a `recipe_id` that the frontend can reference for exports, notifications, or scheduled re-execution.
+
+#### Enabling
+
+```env
+LARAGREP_RECIPES_ENABLED=true
+```
+
+After enabling, publish and run the migration for the `laragrep_recipes` table.
+
+#### How It Works
+
+Every API response now includes a `recipe_id`:
+
+```json
+{
+    "summary": "Sales this week totaled...",
+    "conversation_id": "uuid",
+    "recipe_id": 42
+}
+```
+
+#### Dispatching a Recipe
+
+The frontend can dispatch a recipe for export or notification:
+
+```bash
+curl -X POST http://localhost/laragrep/recipes/42/dispatch \
+  -H "Content-Type: application/json" \
+  -d '{"format": "notification", "period": "now"}'
+```
+
+The `period` parameter controls timing:
+- `"now"` — immediate execution (default)
+- `"2026-02-10 08:00:00"` — scheduled for a specific date/time
+
+LaraGrep fires a `RecipeDispatched` event and returns `{"status": "dispatched"}`. Your app handles the rest via a listener:
+
+```php
+// app/Listeners/HandleRecipeDispatch.php
+use LaraGrep\Events\RecipeDispatched;
+use LaraGrep\LaraGrep;
+
+public function handle(RecipeDispatched $event)
+{
+    $job = new ProcessRecipeJob($event->recipe, $event->format, $event->userId);
+
+    if ($event->period === 'now') {
+        dispatch($job);
+    } else {
+        dispatch($job)->delay(Carbon::parse($event->period));
+    }
+}
+```
+
+```php
+// app/Jobs/ProcessRecipeJob.php
+use LaraGrep\Monitor\MonitorRecorder;
+
+public function handle(MonitorRecorder $recorder)
+{
+    // Using MonitorRecorder ensures replays are tracked in the monitor.
+    // When the monitor is disabled, MonitorRecorder resolves to null —
+    // in that case, inject LaraGrep directly instead.
+    $answer = $recorder->replayRecipe($this->recipe, $this->userId);
+    $result = $recorder->formatResult($answer, $this->format);
+
+    // Send email, generate Excel, post to Slack, etc.
+}
+```
+
+#### Viewing a Recipe
+
+```bash
+curl http://localhost/laragrep/recipes/42
+```
+
+#### Programmatic Usage
+
+You can also use recipes programmatically without the API:
+
+```php
+$laraGrep = app(LaraGrep::class);
+
+// First run
+$answer = $laraGrep->answerQuestion('Weekly sales by region');
+$recipe = $laraGrep->extractRecipe($answer, 'Weekly sales by region', 'default');
+
+// Later — replay with fresh data
+$freshAnswer = $laraGrep->replayRecipe($recipe);
+$tables = $laraGrep->formatResult($freshAnswer, 'export');
+$notification = $laraGrep->formatResult($freshAnswer, 'notification');
+```
+
+When the monitor is enabled, use `MonitorRecorder` instead of `LaraGrep` to ensure replays appear in the dashboard:
+
+```php
+$recorder = app(MonitorRecorder::class);
+$answer = $recorder->replayRecipe($recipe, $userId);
+$result = $recorder->formatResult($answer, 'export');
+```
+
+The recipe stores the question, scope, and the SQL queries that worked — not the results. On replay, the AI adjusts date bindings and parameters automatically, converging in fewer iterations than a fresh question.
 
 ## Extending
 
@@ -405,6 +551,9 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_MONITOR_CONNECTION`     | `sqlite`             | DB connection for monitor logs       |
 | `LARAGREP_MONITOR_TABLE`          | `laragrep_logs`      | Table name for monitor logs          |
 | `LARAGREP_MONITOR_RETENTION_DAYS` | `30`                 | Auto-delete logs after days          |
+| `LARAGREP_RECIPES_ENABLED`        | `false`              | Enable recipe auto-save              |
+| `LARAGREP_RECIPES_CONNECTION`     | `sqlite`             | DB connection for recipes            |
+| `LARAGREP_RECIPES_TABLE`          | `laragrep_recipes`   | Table name for recipes               |
 
 ## Monitor
 

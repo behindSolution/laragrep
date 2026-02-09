@@ -16,6 +16,7 @@ use LaraGrep\Monitor\MonitorRepository;
 use LaraGrep\Monitor\MonitorStore;
 use LaraGrep\Monitor\TokenEstimator;
 use LaraGrep\Prompt\PromptBuilder;
+use LaraGrep\Recipe\RecipeStore;
 use LaraGrep\Prompt\ResponseParser;
 use LaraGrep\Query\QueryExecutor;
 use LaraGrep\Query\QueryValidator;
@@ -117,6 +118,25 @@ class LaraGrepServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(TokenEstimator::class);
+
+        $this->app->singleton(RecipeStore::class, function ($app) {
+            $config = $app['config']->get('laragrep.recipes', []);
+
+            if (!is_array($config) || !($config['enabled'] ?? false)) {
+                return null;
+            }
+
+            $connectionName = $config['connection'] ?? null;
+
+            $connection = is_string($connectionName) && $connectionName !== ''
+                ? $app['db']->connection($connectionName)
+                : $app['db']->connection();
+
+            return new RecipeStore(
+                $connection,
+                (string) ($config['table'] ?? 'laragrep_recipes'),
+            );
+        });
 
         $this->app->singleton(MonitorStore::class, function ($app) {
             $config = $app['config']->get('laragrep.monitor', []);

@@ -195,6 +195,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Recipes
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, LaraGrep auto-saves a "recipe" (question + queries) after
+    | each answer. The frontend can reference recipes by ID and dispatch them
+    | for export, notification, or scheduled re-execution.
+    |
+    | Dispatching fires a RecipeDispatched event — your app handles the rest.
+    |
+    */
+
+    'recipes' => [
+        'enabled' => (bool) env('LARAGREP_RECIPES_ENABLED', false),
+        'connection' => env('LARAGREP_RECIPES_CONNECTION', 'sqlite'),
+        'table' => env('LARAGREP_RECIPES_TABLE', 'laragrep_recipes'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Debug Mode
     |--------------------------------------------------------------------------
     |

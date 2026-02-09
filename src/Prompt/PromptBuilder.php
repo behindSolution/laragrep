@@ -153,6 +153,64 @@ class PromptBuilder
     }
 
     /**
+     * Build messages for replaying a saved recipe.
+     * The AI receives the previous queries as context and adjusts parameters for the current execution.
+     *
+     * @return array<int, array{role: string, content: string}>
+     */
+    public function buildReplayMessages(
+        string $question,
+        array $tables,
+        array $previousQueries,
+        string $userLanguage = 'en',
+        ?array $database = null,
+        ?string $customSystemPrompt = null,
+    ): array {
+        $messages = [];
+
+        $messages[] = [
+            'role' => 'system',
+            'content' => $this->buildSystemPrompt($tables, $userLanguage, $database, $customSystemPrompt),
+        ];
+
+        $recipeContext = collect($previousQueries)
+            ->map(function (array $query, int $index) {
+                $sql = $query['query'] ?? '';
+                $bindings = $query['bindings'] ?? [];
+                $reason = $query['reason'] ?? '';
+
+                $line = sprintf('%d. %s', $index + 1, $sql);
+
+                if ($bindings !== []) {
+                    $line .= PHP_EOL . '   Bindings: ' . json_encode($bindings, JSON_UNESCAPED_UNICODE);
+                }
+
+                if ($reason !== '') {
+                    $line .= PHP_EOL . '   Reason: ' . $reason;
+                }
+
+                return $line;
+            })
+            ->implode(PHP_EOL . PHP_EOL);
+
+        $userContent = implode(PHP_EOL . PHP_EOL, [
+            $this->buildUserPrompt($question),
+            'This question was previously answered using these queries:',
+            $recipeContext,
+            sprintf(
+                'Today is %s. Re-execute these queries with parameters adjusted for the current date and context. '
+                . 'If the queries are still appropriate, use them with updated bindings. '
+                . 'If not, you may modify or add new queries as needed.',
+                date('Y-m-d')
+            ),
+        ]);
+
+        $messages[] = ['role' => 'user', 'content' => $userContent];
+
+        return $messages;
+    }
+
+    /**
      * Build a message asking the AI to provide a final answer with whatever data it has so far.
      */
     public function buildForceAnswerMessage(string $userLanguage = 'en'): array
@@ -200,6 +258,91 @@ class PromptBuilder
                 ]),
             ],
         ];
+    }
+
+    /**
+     * Build messages for formatting raw query results into an export-ready structure.
+     *
+     * @return array<int, array{role: string, content: string}>
+     */
+    public function buildFormatExportMessages(array $steps, string $summary, string $userLanguage = 'en'): array
+    {
+        $data = $this->summarizeStepsForFormat($steps);
+
+        return [
+            [
+                'role' => 'system',
+                'content' => 'You are a data formatting assistant. You receive raw SQL query results and a summary. Your job is to organize the data into clean tables ready for spreadsheet export. Respond with ONLY a JSON array of table objects.',
+            ],
+            [
+                'role' => 'user',
+                'content' => implode(PHP_EOL . PHP_EOL, [
+                    'Summary: ' . $summary,
+                    'Query results:',
+                    $data,
+                    'Organize this data into clean tables for spreadsheet export. Use clear column headers in ' . $userLanguage . '.',
+                    'Respond with ONLY a JSON array: [{"title": "...", "headers": ["Col1", "Col2"], "rows": [["val1", "val2"], ...]}, ...]',
+                    'Rules:',
+                    '- Each distinct dataset should be a separate table object.',
+                    '- Use human-readable headers (not raw column names). Translate to ' . $userLanguage . '.',
+                    '- Format numbers and dates for readability.',
+                    '- Exclude exploratory/intermediate data that is not relevant to the final answer.',
+                ]),
+            ],
+        ];
+    }
+
+    /**
+     * Build messages for formatting raw query results into a notification-ready structure.
+     *
+     * @return array<int, array{role: string, content: string}>
+     */
+    public function buildFormatNotificationMessages(array $steps, string $summary, string $userLanguage = 'en'): array
+    {
+        $data = $this->summarizeStepsForFormat($steps);
+
+        return [
+            [
+                'role' => 'system',
+                'content' => 'You are a data formatting assistant. You receive raw SQL query results and a summary. Your job is to create notification-ready content (for email, Slack, etc). Respond with ONLY a JSON object.',
+            ],
+            [
+                'role' => 'user',
+                'content' => implode(PHP_EOL . PHP_EOL, [
+                    'Summary: ' . $summary,
+                    'Query results:',
+                    $data,
+                    'Create notification-ready content in ' . $userLanguage . '.',
+                    'Respond with ONLY a JSON object: {"title": "...", "html": "...", "text": "..."}',
+                    'Rules:',
+                    '- "title": A short, descriptive title for the notification.',
+                    '- "html": Well-formatted HTML content with tables, bold text, and bullet points as needed. Use inline styles for email compatibility. Include the key data, not just the summary.',
+                    '- "text": Plain text version of the same content, using pipes for tables and line breaks for structure. Suitable for Slack, SMS, or logs.',
+                    '- Write everything in ' . $userLanguage . '.',
+                    '- Focus on the final answer and key metrics, skip intermediate/exploratory data.',
+                ]),
+            ],
+        ];
+    }
+
+    protected function summarizeStepsForFormat(array $steps): string
+    {
+        $parts = [];
+
+        foreach ($steps as $i => $step) {
+            $results = $step['results'] ?? [];
+
+            if (!is_array($results) || $results === []) {
+                continue;
+            }
+
+            $reason = $step['reason'] ?? 'Query ' . ($i + 1);
+            $json = json_encode($results, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+            $parts[] = sprintf('[%s] %s', $reason, $json);
+        }
+
+        return $parts !== [] ? implode(PHP_EOL, $parts) : 'No query results available.';
     }
 
     protected function buildDatabaseContextLine(?array $database): ?string

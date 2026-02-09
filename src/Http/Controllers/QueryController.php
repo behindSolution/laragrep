@@ -8,12 +8,14 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Str;
 use LaraGrep\LaraGrep;
 use LaraGrep\Monitor\MonitorRecorder;
+use LaraGrep\Recipe\RecipeStore;
 
 class QueryController extends Controller
 {
     public function __construct(
         protected LaraGrep $service,
         protected ?MonitorRecorder $recorder = null,
+        protected ?RecipeStore $recipeStore = null,
     ) {
     }
 
@@ -24,6 +26,8 @@ class QueryController extends Controller
             'debug' => ['sometimes', 'boolean'],
             'conversation_id' => ['sometimes', 'nullable', 'string'],
         ]);
+
+        $question = $validated['question'];
 
         $debug = array_key_exists('debug', $validated)
             ? (bool) $validated['debug']
@@ -52,16 +56,14 @@ class QueryController extends Controller
 
         if ($this->recorder !== null) {
             $answer = $this->recorder->answerQuestion(
-                $validated['question'],
-                $debug,
+                $question,
                 $scope,
                 $conversationId,
                 $userId,
             );
         } else {
             $answer = $this->service->answerQuestion(
-                $validated['question'],
-                $debug,
+                $question,
                 $scope,
                 $conversationId,
             );
@@ -69,6 +71,28 @@ class QueryController extends Controller
 
         if ($conversationId !== null) {
             $answer['conversation_id'] = $conversationId;
+        }
+
+        // Auto-save recipe
+        if ($this->recipeStore !== null) {
+            try {
+                $recipe = $this->service->extractRecipe($answer, $question, $scope);
+                $recipeId = $this->recipeStore->save([
+                    'conversation_id' => $conversationId,
+                    'user_id' => $userId,
+                    'scope' => $scope,
+                    'question' => mb_substr($question, 0, 1000),
+                    'summary' => $answer['summary'] ?? null,
+                    'recipe' => json_encode($recipe, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ]);
+                $answer['recipe_id'] = $recipeId;
+            } catch (\Throwable) {
+                // Recipe storage must never break the query
+            }
+        }
+
+        if (!$debug) {
+            unset($answer['steps'], $answer['debug']);
         }
 
         return response()->json($answer);
