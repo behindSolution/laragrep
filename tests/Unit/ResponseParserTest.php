@@ -142,6 +142,32 @@ class ResponseParserTest extends TestCase
 
     // ── parseTableSelection ─────────────────────────────────────────
 
+    public function test_parse_action_extracts_first_json_from_concatenated_objects(): void
+    {
+        $content = '{"action": "answer", "summary": "There are 15 users."}'
+            . "\n"
+            . '{"action": "query", "queries": [{"query": "SELECT COUNT(*) FROM users", "bindings": []}]}'
+            . "\n"
+            . '{"action": "answer", "summary": "There are 15 users."}';
+
+        $result = $this->parser->parseAction($content);
+
+        $this->assertSame('answer', $result['action']);
+        $this->assertSame('There are 15 users.', $result['summary']);
+    }
+
+    public function test_parse_action_extracts_first_json_with_surrounding_text(): void
+    {
+        $content = 'Here is my response: {"action": "answer", "summary": "Done."} and some trailing text.';
+
+        $result = $this->parser->parseAction($content);
+
+        $this->assertSame('answer', $result['action']);
+        $this->assertSame('Done.', $result['summary']);
+    }
+
+    // ── parseTableSelection ─────────────────────────────────────────
+
     public function test_parse_table_selection(): void
     {
         $result = $this->parser->parseTableSelection('{"tables": ["Users", "Orders"]}');

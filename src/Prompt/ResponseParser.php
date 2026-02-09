@@ -51,6 +51,14 @@ class ResponseParser
         $decoded = json_decode($content, true);
 
         if (!is_array($decoded)) {
+            $firstJson = $this->extractFirstJson($content);
+
+            if ($firstJson !== null) {
+                $decoded = json_decode($firstJson, true);
+            }
+        }
+
+        if (!is_array($decoded)) {
             throw new RuntimeException('Language model response was not valid JSON.');
         }
 
@@ -120,5 +128,54 @@ class ResponseParser
             'action' => 'query',
             'queries' => $normalized,
         ];
+    }
+
+    private function extractFirstJson(string $content): ?string
+    {
+        $start = strpos($content, '{');
+
+        if ($start === false) {
+            return null;
+        }
+
+        $depth = 0;
+        $inString = false;
+        $escape = false;
+        $len = strlen($content);
+
+        for ($i = $start; $i < $len; $i++) {
+            $char = $content[$i];
+
+            if ($escape) {
+                $escape = false;
+                continue;
+            }
+
+            if ($char === '\\' && $inString) {
+                $escape = true;
+                continue;
+            }
+
+            if ($char === '"') {
+                $inString = !$inString;
+                continue;
+            }
+
+            if ($inString) {
+                continue;
+            }
+
+            if ($char === '{') {
+                $depth++;
+            } elseif ($char === '}') {
+                $depth--;
+
+                if ($depth === 0) {
+                    return substr($content, $start, $i - $start + 1);
+                }
+            }
+        }
+
+        return null;
     }
 }

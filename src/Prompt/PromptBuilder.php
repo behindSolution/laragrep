@@ -13,6 +13,8 @@ class PromptBuilder
             '2. Provide the final answer: {"action": "answer", "summary": "Your human-readable answer here"}',
             'The "queries" array can contain one or more queries. Use multiple queries in a single turn when they are independent of each other (e.g., counting users and counting orders). Use separate turns when a query depends on the result of a previous one.',
             'Rules:'
+            . PHP_EOL . '- CRITICAL: Respond with EXACTLY ONE JSON object per turn. Never output multiple JSON objects, extra text, or any content outside the single JSON object.'
+            . PHP_EOL . '- CRITICAL: NEVER fabricate, invent, or guess data. Only include data that was returned from actual query execution results. If you have not executed a query yet, do NOT include data in your answer.'
             . PHP_EOL . '- Only generate parameterized SELECT statements. Never produce CREATE, INSERT, UPDATE, DELETE, DROP, ALTER, or any mutating command.'
             . PHP_EOL . '- Only reference tables explicitly listed in the schema. If a table is missing, use {"action": "answer", "summary": "<explain the limitation>"}.'
             . PHP_EOL . '- If the question cannot be answered with a query (out of scope, unsafe request, etc.), respond directly with {"action": "answer", "summary": "<polite explanation>"}.'
