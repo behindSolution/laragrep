@@ -75,6 +75,11 @@ class Column
         return new static($name, 'date');
     }
 
+    public static function time(string $name): static
+    {
+        return new static($name, 'time');
+    }
+
     public static function dateTime(string $name): static
     {
         return new static($name, 'datetime');
