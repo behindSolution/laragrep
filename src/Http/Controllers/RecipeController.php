@@ -40,7 +40,7 @@ class RecipeController extends Controller
     public function dispatch(Request $request, int $id): JsonResponse
     {
         $validated = $request->validate([
-            'format' => ['required', 'string', 'in:export,notification'],
+            'format' => ['required', 'string', 'in:query,notification'],
             'period' => ['sometimes', 'string'],
         ]);
 

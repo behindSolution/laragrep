@@ -355,27 +355,47 @@ The `answerQuestion()` method always returns the full response including `summar
 
 ### Formatting Results
 
-Use `formatResult()` to transform raw query results into structured formats via AI. This is useful for building exports, notifications, or reports programmatically.
+Use `formatResult()` to transform raw query results into structured formats via AI.
 
-**Export format** — tabular data for spreadsheets:
+**Query format** — a single consolidated SQL query for export:
 
 ```php
-$answer = $laraGrep->answerQuestion('Top 10 products by revenue');
+$answer = $laraGrep->answerQuestion('Weekly sales by region');
 
-$tables = $laraGrep->formatResult($answer, 'export');
+$result = $laraGrep->formatResult($answer, 'query');
 // [
-//     [
-//         'title' => 'Top 10 Products by Revenue',
-//         'headers' => ['Product', 'Revenue', 'Units Sold'],
-//         'rows' => [
-//             ['Widget Pro', 45230.00, 890],
-//             ['Gadget X', 38100.50, 650],
-//         ],
-//     ],
+//     'title' => 'Weekly Sales by Region',
+//     'headers' => ['Region', 'Total Sales', 'Order Count'],
+//     'query' => 'SELECT r.name as region, SUM(o.total) as total_sales, COUNT(*) as order_count FROM orders o JOIN regions r ON o.region_id = r.id WHERE o.created_at >= ? GROUP BY r.name ORDER BY total_sales DESC',
+//     'bindings' => ['2026-02-01'],
 // ]
 ```
 
-The structure is always `title`, `headers`, `rows` — feed it into any CSV, XLSX, or PDF library.
+Returns the SQL itself — no `LIMIT`, no memory constraints. The AI consolidates all exploratory queries into one optimized query. If the queries cannot be consolidated into a single statement, the AI will return the best possible approximation — always validate the result before using in production. Use it with Laravel's streaming tools:
+
+```php
+// Stream with cursor — zero memory usage
+foreach (DB::cursor($result['query'], $result['bindings']) as $row) {
+    // process row
+}
+
+// Chunk for batch processing
+DB::table(DB::raw("({$result['query']}) as sub"))
+    ->setBindings($result['bindings'])
+    ->chunk(1000, function ($rows) {
+        // process chunk
+    });
+
+// Laravel Excel
+use Maatwebsite\Excel\Concerns\FromQuery;
+
+new class($result) implements FromQuery {
+    public function query() {
+        return DB::table(DB::raw("({$this->result['query']}) as sub"))
+            ->setBindings($this->result['bindings']);
+    }
+};
+```
 
 **Notification format** — ready-to-render content for email, Slack, or webhooks:
 
@@ -416,7 +436,7 @@ Every API response now includes a `recipe_id`:
 
 #### Dispatching a Recipe
 
-The frontend can dispatch a recipe for export or notification:
+The frontend can dispatch a recipe for query or notification:
 
 ```bash
 curl -X POST http://localhost/laragrep/recipes/42/dispatch \
@@ -482,7 +502,7 @@ $recipe = $laraGrep->extractRecipe($answer, 'Weekly sales by region', 'default')
 
 // Later — replay with fresh data
 $freshAnswer = $laraGrep->replayRecipe($recipe);
-$tables = $laraGrep->formatResult($freshAnswer, 'export');
+$queryResult = $laraGrep->formatResult($freshAnswer, 'query');
 $notification = $laraGrep->formatResult($freshAnswer, 'notification');
 ```
 
@@ -491,7 +511,7 @@ When the monitor is enabled, use `MonitorRecorder` instead of `LaraGrep` to ensu
 ```php
 $recorder = app(MonitorRecorder::class);
 $answer = $recorder->replayRecipe($recipe, $userId);
-$result = $recorder->formatResult($answer, 'export');
+$result = $recorder->formatResult($answer, 'query');
 ```
 
 The recipe stores the question, scope, and the SQL queries that worked — not the results. On replay, the AI adjusts date bindings and parameters automatically, converging in fewer iterations than a fresh question.

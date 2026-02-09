@@ -150,7 +150,7 @@ class LaraGrep
      * Transform raw answer data into a structured format using AI.
      *
      * @param  array  $answer  The full answer from answerQuestion() or replayRecipe()
-     * @param  string  $format  'export' or 'notification'
+     * @param  string  $format  'query' or 'notification'
      * @return array  Structured data ready for consumption
      */
     public function formatResult(array $answer, string $format): array
@@ -160,9 +160,9 @@ class LaraGrep
         $userLanguage = $this->config['user_language'] ?? 'en';
 
         $messages = match ($format) {
-            'export' => $this->promptBuilder->buildFormatExportMessages($steps, $summary, $userLanguage),
+            'query' => $this->promptBuilder->buildFormatQueryMessages($steps, $summary, $userLanguage),
             'notification' => $this->promptBuilder->buildFormatNotificationMessages($steps, $summary, $userLanguage),
-            default => throw new RuntimeException("Unsupported format: {$format}. Use 'export' or 'notification'."),
+            default => throw new RuntimeException("Unsupported format: {$format}. Use 'query' or 'notification'."),
         };
 
         $aiResponse = $this->aiClient->chat($messages);

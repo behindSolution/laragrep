@@ -261,38 +261,6 @@ class PromptBuilder
     }
 
     /**
-     * Build messages for formatting raw query results into an export-ready structure.
-     *
-     * @return array<int, array{role: string, content: string}>
-     */
-    public function buildFormatExportMessages(array $steps, string $summary, string $userLanguage = 'en'): array
-    {
-        $data = $this->summarizeStepsForFormat($steps);
-
-        return [
-            [
-                'role' => 'system',
-                'content' => 'You are a data formatting assistant. You receive raw SQL query results and a summary. Your job is to organize the data into clean tables ready for spreadsheet export. Respond with ONLY a JSON array of table objects.',
-            ],
-            [
-                'role' => 'user',
-                'content' => implode(PHP_EOL . PHP_EOL, [
-                    'Summary: ' . $summary,
-                    'Query results:',
-                    $data,
-                    'Organize this data into clean tables for spreadsheet export. Use clear column headers in ' . $userLanguage . '.',
-                    'Respond with ONLY a JSON array: [{"title": "...", "headers": ["Col1", "Col2"], "rows": [["val1", "val2"], ...]}, ...]',
-                    'Rules:',
-                    '- Each distinct dataset should be a separate table object.',
-                    '- Use human-readable headers (not raw column names). Translate to ' . $userLanguage . '.',
-                    '- Format numbers and dates for readability.',
-                    '- Exclude exploratory/intermediate data that is not relevant to the final answer.',
-                ]),
-            ],
-        ];
-    }
-
-    /**
      * Build messages for formatting raw query results into a notification-ready structure.
      *
      * @return array<int, array{role: string, content: string}>
@@ -320,6 +288,65 @@ class PromptBuilder
                     '- "text": Plain text version of the same content, using pipes for tables and line breaks for structure. Suitable for Slack, SMS, or logs.',
                     '- Write everything in ' . $userLanguage . '.',
                     '- Focus on the final answer and key metrics, skip intermediate/exploratory data.',
+                ]),
+            ],
+        ];
+    }
+
+    /**
+     * Build messages for generating a single consolidated query for bulk export.
+     * Instead of returning data, the AI returns the query itself for the developer
+     * to execute with cursor/chunk (no memory limits).
+     *
+     * @return array<int, array{role: string, content: string}>
+     */
+    public function buildFormatQueryMessages(array $steps, string $summary, string $userLanguage = 'en'): array
+    {
+        $queryContext = [];
+
+        foreach ($steps as $i => $step) {
+            $query = $step['query'] ?? '';
+            $bindings = $step['bindings'] ?? [];
+            $reason = $step['reason'] ?? 'Query ' . ($i + 1);
+            $error = $step['error'] ?? null;
+
+            if ($query === '' || $error !== null) {
+                continue;
+            }
+
+            $line = sprintf('[%s] %s', $reason, $query);
+
+            if ($bindings !== []) {
+                $line .= PHP_EOL . 'Bindings: ' . json_encode($bindings, JSON_UNESCAPED_UNICODE);
+            }
+
+            $queryContext[] = $line;
+        }
+
+        $data = $queryContext !== [] ? implode(PHP_EOL . PHP_EOL, $queryContext) : 'No queries available.';
+
+        return [
+            [
+                'role' => 'system',
+                'content' => 'You are a SQL expert. You receive a set of queries that were used to answer a question. Your job is to consolidate them into a SINGLE optimized query that returns all the data needed. Respond with ONLY a JSON object.',
+            ],
+            [
+                'role' => 'user',
+                'content' => implode(PHP_EOL . PHP_EOL, [
+                    'Question: ' . $summary,
+                    'Queries used:',
+                    $data,
+                    'Consolidate into a single query optimized for bulk data export.',
+                    'Respond with ONLY a JSON object: {"title": "...", "headers": ["Col1", "Col2"], "query": "SELECT ...", "bindings": [...]}',
+                    'Rules:',
+                    '- Write ONE single SELECT query that returns all the relevant data.',
+                    '- Do NOT add LIMIT — the developer will handle pagination/streaming.',
+                    '- Use clear column aliases that match the headers.',
+                    '- "headers": human-readable column names in ' . $userLanguage . '.',
+                    '- "title": a short title describing the dataset in ' . $userLanguage . '.',
+                    '- "bindings": array of parameter values matching ? placeholders in the query.',
+                    '- If the original queries used date filters, keep them with current values.',
+                    '- Prefer JOINs over subqueries when possible.',
                 ]),
             ],
         ];
