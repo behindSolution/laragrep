@@ -63,11 +63,11 @@ class RecipeController extends Controller
         $userId = is_callable($userIdResolver) ? $userIdResolver() : auth()->id();
 
         RecipeDispatched::dispatch(
-            recipeId: (int) $entry->id,
-            recipe: $recipe,
-            format: $format,
-            period: $period,
-            userId: $userId,
+            (int) $entry->id,
+            $recipe,
+            $format,
+            $period,
+            $userId,
         );
 
         return response()->json(['status' => 'dispatched']);
