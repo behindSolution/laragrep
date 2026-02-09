@@ -241,7 +241,7 @@ LaraGrep supports multi-turn conversations out of the box. When enabled, previou
 LARAGREP_CONVERSATION_ENABLED=true
 LARAGREP_CONVERSATION_CONNECTION=sqlite
 LARAGREP_CONVERSATION_MAX_MESSAGES=10
-LARAGREP_CONVERSATION_TTL_DAYS=10
+LARAGREP_CONVERSATION_RETENTION_DAYS=10
 ```
 
 ### Route Protection
@@ -546,7 +546,7 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_CONVERSATION_ENABLED`    | `true`               | Enable conversation persistence      |
 | `LARAGREP_CONVERSATION_CONNECTION` | `sqlite`             | DB connection for conversations      |
 | `LARAGREP_CONVERSATION_MAX_MESSAGES`| `10`                | Max messages per conversation        |
-| `LARAGREP_CONVERSATION_TTL_DAYS`   | `10`                 | Auto-delete conversations after days |
+| `LARAGREP_CONVERSATION_RETENTION_DAYS`   | `10`                 | Auto-delete conversations after days |
 | `LARAGREP_MONITOR_ENABLED`        | `false`              | Enable monitoring dashboard          |
 | `LARAGREP_MONITOR_CONNECTION`     | `sqlite`             | DB connection for monitor logs       |
 | `LARAGREP_MONITOR_TABLE`          | `laragrep_logs`      | Table name for monitor logs          |
@@ -554,6 +554,7 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_RECIPES_ENABLED`        | `false`              | Enable recipe auto-save              |
 | `LARAGREP_RECIPES_CONNECTION`     | `sqlite`             | DB connection for recipes            |
 | `LARAGREP_RECIPES_TABLE`          | `laragrep_recipes`   | Table name for recipes               |
+| `LARAGREP_RECIPES_RETENTION_DAYS` | `30`                 | Auto-delete recipes after days       |
 
 ## Monitor
 

@@ -83,7 +83,7 @@ class LaraGrepServiceProvider extends ServiceProvider
                 $connection,
                 (string) ($config['table'] ?? 'laragrep_conversations'),
                 (int) ($config['max_messages'] ?? 10),
-                (int) ($config['ttl_days'] ?? 10),
+                (int) ($config['retention_days'] ?? 10),
             );
         });
 
@@ -135,6 +135,7 @@ class LaraGrepServiceProvider extends ServiceProvider
             return new RecipeStore(
                 $connection,
                 (string) ($config['table'] ?? 'laragrep_recipes'),
+                (int) ($config['retention_days'] ?? 30),
             );
         });
 

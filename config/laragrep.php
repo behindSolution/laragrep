@@ -130,7 +130,7 @@ return [
         'connection' => env('LARAGREP_CONVERSATION_CONNECTION', 'sqlite'),
         'table' => env('LARAGREP_CONVERSATION_TABLE', 'laragrep_conversations'),
         'max_messages' => (int) env('LARAGREP_CONVERSATION_MAX_MESSAGES', 10),
-        'ttl_days' => (int) env('LARAGREP_CONVERSATION_TTL_DAYS', 10),
+        'retention_days' => (int) env('LARAGREP_CONVERSATION_RETENTION_DAYS', 10),
     ],
 
     /*
@@ -210,6 +210,7 @@ return [
         'enabled' => (bool) env('LARAGREP_RECIPES_ENABLED', false),
         'connection' => env('LARAGREP_RECIPES_CONNECTION', 'sqlite'),
         'table' => env('LARAGREP_RECIPES_TABLE', 'laragrep_recipes'),
+        'retention_days' => (int) env('LARAGREP_RECIPES_RETENTION_DAYS', 30),
     ],
 
     /*

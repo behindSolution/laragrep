@@ -15,10 +15,10 @@ class DatabaseConversationStore implements ConversationStoreInterface
         protected ConnectionInterface $connection,
         protected string $table,
         protected int $maxMessages = 10,
-        protected int $ttlDays = 10
+        protected int $retentionDays = 10
     ) {
         $this->maxMessages = max(1, $this->maxMessages);
-        $this->ttlDays = max(0, $this->ttlDays);
+        $this->retentionDays = max(0, $this->retentionDays);
     }
 
     public function getMessages(string $conversationId): array
@@ -117,11 +117,11 @@ class DatabaseConversationStore implements ConversationStoreInterface
 
     protected function purgeExpired(): void
     {
-        if ($this->ttlDays <= 0) {
+        if ($this->retentionDays <= 0) {
             return;
         }
 
-        $threshold = Carbon::now()->subDays($this->ttlDays);
+        $threshold = Carbon::now()->subDays($this->retentionDays);
 
         $this->connection->table($this->table)
             ->where('created_at', '<', $threshold)
