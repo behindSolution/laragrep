@@ -1,5 +1,8 @@
 # LaraGrep
 
+[![Latest Version](https://img.shields.io/packagist/v/behindsolution/laragrep.svg)](https://packagist.org/packages/behindsolution/laragrep)
+[![Tests](https://github.com/behindSolution/laragrep/actions/workflows/tests.yml/badge.svg)](https://github.com/behindSolution/laragrep/actions/workflows/tests.yml)
+
 Transform natural language questions into safe, parameterized SQL SELECT queries using OpenAI or Anthropic. LaraGrep uses an **agent loop** — the AI executes queries one at a time, sees the results, and iteratively reasons until it can provide a final answer.
 
 ## Requirements

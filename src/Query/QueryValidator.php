@@ -46,7 +46,7 @@ class QueryValidator
      */
     public function extractTableNames(string $query): array
     {
-        $pattern = '/\b(?:from|join)\s+([`"\[]?[\w.]+[`"\]]?(?:\s+as)?(?:\s+[\w`"\[]+)*)/i';
+        $pattern = '/\b(?:from|join)\s+([`"\[]?[\w.]+[`"\]]?)/i';
 
         if (!preg_match_all($pattern, $query, $matches)) {
             return [];
