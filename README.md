@@ -253,7 +253,11 @@ Broadcast::channel('laragrep.{queryId}', function ($user, $queryId) {
 });
 ```
 
-Broadcasting is entirely optional — polling via GET works without any broadcasting setup.
+Broadcasting is entirely optional — polling via GET works without any broadcasting setup. If you only want polling, make sure broadcasting is disabled in your `.env`:
+
+```env
+BROADCAST_CONNECTION=null
+```
 
 ### Completed records cleanup
 
