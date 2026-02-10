@@ -2,6 +2,7 @@
 
 namespace LaraGrep;
 
+use Closure;
 use LaraGrep\Config\Table;
 use LaraGrep\Contracts\AiClientInterface;
 use LaraGrep\Contracts\ConversationStoreInterface;
@@ -34,6 +35,7 @@ class LaraGrep
         string $question,
         ?string $scope = null,
         ?string $conversationId = null,
+        ?Closure $onStep = null,
     ): array {
         $this->lastPromptTokens = 0;
         $this->lastCompletionTokens = 0;
@@ -66,7 +68,7 @@ class LaraGrep
             conversationHistory: $history,
         );
 
-        $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage);
+        $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep);
 
         if ($conversationId !== null && $this->conversationStore !== null) {
             $this->conversationStore->appendExchange($conversationId, $question, $result['summary']);
@@ -113,7 +115,7 @@ class LaraGrep
      *
      * @param  array  $recipe  Recipe from extractRecipe()
      */
-    public function replayRecipe(array $recipe): array
+    public function replayRecipe(array $recipe, ?Closure $onStep = null): array
     {
         $this->lastPromptTokens = 0;
         $this->lastCompletionTokens = 0;
@@ -143,7 +145,7 @@ class LaraGrep
             customSystemPrompt: $this->config['system_prompt'] ?? null,
         );
 
-        return $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage);
+        return $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep);
     }
 
     /**
@@ -191,6 +193,7 @@ class LaraGrep
         array $knownTables,
         int $maxIterations,
         string $userLanguage,
+        ?Closure $onStep = null,
     ): array {
         $executedSteps = [];
         $debugQueries = [];
@@ -253,6 +256,12 @@ class LaraGrep
                 ];
 
                 $debugQueries = array_merge($debugQueries, $execution['queries']);
+            }
+
+            if ($onStep !== null) {
+                $reasons = array_filter(array_column($action['queries'], 'reason'));
+                $message = implode('; ', $reasons) ?: 'Processing step ' . ($iteration + 1);
+                $onStep($iteration + 1, $message);
             }
 
             $messages[] = ['role' => 'assistant', 'content' => $response];

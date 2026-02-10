@@ -2,6 +2,7 @@
 
 namespace LaraGrep\Monitor;
 
+use Closure;
 use LaraGrep\LaraGrep;
 use Throwable;
 
@@ -23,9 +24,10 @@ class MonitorRecorder
         ?string $scope = null,
         ?string $conversationId = null,
         string|int|null $userId = null,
+        ?Closure $onStep = null,
     ): array {
         return $this->recordExecution(
-            fn () => $this->laraGrep->answerQuestion($question, $scope, $conversationId),
+            fn () => $this->laraGrep->answerQuestion($question, $scope, $conversationId, $onStep),
             $question,
             $scope,
             $conversationId,
@@ -37,9 +39,10 @@ class MonitorRecorder
     public function replayRecipe(
         array $recipe,
         string|int|null $userId = null,
+        ?Closure $onStep = null,
     ): array {
         return $this->recordExecution(
-            fn () => $this->laraGrep->replayRecipe($recipe),
+            fn () => $this->laraGrep->replayRecipe($recipe, $onStep),
             $recipe['question'] ?? '',
             $recipe['scope'] ?? 'default',
             null,

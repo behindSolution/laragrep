@@ -9,6 +9,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use LaraGrep\Contracts\RecipeStoreInterface;
 use LaraGrep\Events\AnswerFailed;
+use LaraGrep\Events\AnswerProgress;
 use LaraGrep\Events\AnswerReady;
 use LaraGrep\LaraGrep;
 use LaraGrep\Monitor\MonitorRecorder;
@@ -39,18 +40,25 @@ class ProcessQuestionJob implements ShouldQueue
 
         $store->markProcessing($this->queryId);
 
+        $onStep = function (int $iteration, string $message) use ($store) {
+            $store->updateProgress($this->queryId, $message);
+            AnswerProgress::dispatch($this->queryId, $iteration, $message);
+        };
+
         if ($recorder !== null) {
             $answer = $recorder->answerQuestion(
                 $this->question,
                 $this->scope,
                 $this->conversationId,
                 $this->userId,
+                $onStep,
             );
         } else {
             $answer = $service->answerQuestion(
                 $this->question,
                 $this->scope,
                 $this->conversationId,
+                $onStep,
             );
         }
 

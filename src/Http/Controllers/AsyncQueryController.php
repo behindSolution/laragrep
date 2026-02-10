@@ -37,6 +37,12 @@ class AsyncQueryController extends Controller
             ]);
         }
 
-        return response()->json(['status' => 'processing']);
+        $response = ['status' => 'processing'];
+
+        if (!empty($record->progress)) {
+            $response['progress'] = $record->progress;
+        }
+
+        return response()->json($response);
     }
 }

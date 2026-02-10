@@ -207,6 +207,12 @@ Returns the current status:
 { "status": "processing" }
 ```
 
+While the AI is working, the response includes a progress message describing the current step:
+
+```json
+{ "status": "processing", "progress": "Counting users registered this week" }
+```
+
 Or when completed:
 
 ```json
@@ -230,6 +236,7 @@ If you have Laravel broadcasting configured (Reverb, Pusher, Soketi, Ably), Lara
 
 | Event | Payload |
 |---|---|
+| `laragrep.answer.progress` | `queryId`, `iteration`, `message` |
 | `laragrep.answer.ready` | `queryId`, `summary`, `conversationId`, `recipeId` |
 | `laragrep.answer.failed` | `queryId`, `error` |
 
@@ -237,6 +244,9 @@ If you have Laravel broadcasting configured (Reverb, Pusher, Soketi, Ably), Lara
 
 ```js
 Echo.channel(response.channel)
+    .listen('.laragrep.answer.progress', (e) => {
+        showProgress(e.message); // "Counting users registered this week"
+    })
     .listen('.laragrep.answer.ready', (e) => {
         showAnswer(e.summary);
     })

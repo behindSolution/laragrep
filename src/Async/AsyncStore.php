@@ -44,6 +44,16 @@ class AsyncStore
             ]);
     }
 
+    public function updateProgress(string $id, string $message): void
+    {
+        $this->connection->table($this->table)
+            ->where('id', $id)
+            ->update([
+                'progress' => $message,
+                'updated_at' => Carbon::now(),
+            ]);
+    }
+
     public function markCompleted(string $id, array $result): void
     {
         $this->connection->table($this->table)

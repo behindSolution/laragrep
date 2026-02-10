@@ -18,6 +18,7 @@ return new class extends Migration
             $table->text('question');
             $table->string('conversation_id')->nullable();
             $table->string('status', 20)->default('pending');
+            $table->text('progress')->nullable();
             $table->text('result')->nullable();
             $table->text('error')->nullable();
             $table->timestamp('created_at')->nullable();
