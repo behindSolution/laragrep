@@ -21,6 +21,8 @@ class ProcessQuestionJob implements ShouldQueue
 
     public int $tries = 1;
 
+    public int $timeout;
+
     public function __construct(
         public readonly string $queryId,
         public readonly string $question,
@@ -29,6 +31,7 @@ class ProcessQuestionJob implements ShouldQueue
         public readonly string|int|null $userId,
         public readonly bool $debug,
     ) {
+        $this->timeout = (int) config('laragrep.timeout', 300);
     }
 
     public function handle(): void
