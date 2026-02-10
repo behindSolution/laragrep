@@ -166,6 +166,101 @@ Protect it with middleware:
 
 ---
 
+## Async Mode
+
+The agent loop can take 30-100+ seconds with multiple iterations, easily exceeding PHP or Nginx timeouts. Async mode dispatches the processing to a queue job and returns immediately.
+
+### Enable
+
+```env
+LARAGREP_ASYNC_ENABLED=true
+LARAGREP_ASYNC_QUEUE_CONNECTION=redis
+```
+
+Requires a real queue driver (`redis`, `database`, `sqs`, etc.). LaraGrep will throw an exception at boot if the queue connection uses the `sync` driver.
+
+When enabled, **all requests** become async — the frontend doesn't decide, the backend does.
+
+### How It Works
+
+```
+POST /laragrep { "question": "..." }
+
+-> 202 Accepted
+{
+    "query_id": "550e8400-e29b-41d4-a716-446655440000",
+    "channel": "laragrep.550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+The agent loop runs in a background job. When it finishes, the result is delivered via **broadcasting** (WebSocket) and/or **polling** (GET endpoint).
+
+### Polling
+
+```bash
+GET /laragrep/queries/{query_id}
+```
+
+Returns the current status:
+
+```json
+{ "status": "processing" }
+```
+
+Or when completed:
+
+```json
+{
+    "status": "completed",
+    "summary": "There were 42 new registrations this week.",
+    "conversation_id": "...",
+    "recipe_id": 42
+}
+```
+
+Or on failure:
+
+```json
+{ "status": "failed", "error": "Sorry, something went wrong..." }
+```
+
+### Broadcasting (Optional)
+
+If you have Laravel broadcasting configured (Reverb, Pusher, Soketi, Ably), LaraGrep broadcasts two events on the channel returned in the response:
+
+| Event | Payload |
+|---|---|
+| `laragrep.answer.ready` | `queryId`, `summary`, `conversationId`, `recipeId` |
+| `laragrep.answer.failed` | `queryId`, `error` |
+
+**Frontend example (Laravel Echo):**
+
+```js
+Echo.channel(response.channel)
+    .listen('.laragrep.answer.ready', (e) => {
+        showAnswer(e.summary);
+    })
+    .listen('.laragrep.answer.failed', (e) => {
+        showError(e.error);
+    });
+```
+
+For private channels, set `LARAGREP_ASYNC_PRIVATE=true` and register the channel authorization in your `routes/channels.php`:
+
+```php
+Broadcast::channel('laragrep.{queryId}', function ($user, $queryId) {
+    return true; // your authorization logic
+});
+```
+
+Broadcasting is entirely optional — polling via GET works without any broadcasting setup.
+
+### Completed records cleanup
+
+Async records are automatically cleaned up after 24 hours (configurable via `LARAGREP_ASYNC_RETENTION_HOURS`).
+
+---
+
 ## How It Works
 
 Unlike simple text-to-SQL tools, LaraGrep uses an **agent loop**:
@@ -551,12 +646,12 @@ public function handle(RecipeDispatched $event)
 
 ```php
 // app/Jobs/ProcessRecipeJob.php
-use LaraGrep\Monitor\MonitorRecorder;
+use LaraGrep\LaraGrep;
 
-public function handle(MonitorRecorder $recorder)
+public function handle(LaraGrep $laraGrep)
 {
-    $answer = $recorder->replayRecipe($this->recipe, $this->userId);
-    $result = $recorder->formatResult($answer, $this->format);
+    $answer = $laraGrep->replayRecipe($this->recipe);
+    $result = $laraGrep->formatResult($answer, $this->format);
 
     // Send email, generate Excel, post to Slack, etc.
 }
@@ -565,6 +660,8 @@ public function handle(MonitorRecorder $recorder)
 **Programmatic usage:**
 
 ```php
+use LaraGrep\LaraGrep;
+
 $laraGrep = app(LaraGrep::class);
 
 // First run
@@ -576,7 +673,7 @@ $freshAnswer = $laraGrep->replayRecipe($recipe);
 $notification = $laraGrep->formatResult($freshAnswer, 'notification');
 ```
 
-When the monitor is enabled, use `MonitorRecorder` instead of `LaraGrep` to ensure replays appear in the dashboard.
+> **With monitor enabled?** Inject `LaraGrep\Monitor\MonitorRecorder` instead of `LaraGrep`. It wraps the same methods (`answerQuestion`, `replayRecipe`, `formatResult`) and automatically records every execution in the dashboard. When the monitor is disabled, `MonitorRecorder` resolves to `null` — so use `LaraGrep` as the safe default.
 
 ---
 
@@ -642,6 +739,14 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_RECIPES_CONNECTION` | `sqlite` | DB connection for recipes |
 | `LARAGREP_RECIPES_TABLE` | `laragrep_recipes` | Table name for recipes |
 | `LARAGREP_RECIPES_RETENTION_DAYS` | `30` | Auto-delete recipes after days |
+| `LARAGREP_ASYNC_ENABLED` | `false` | Enable async mode |
+| `LARAGREP_ASYNC_CONNECTION` | `laragrep` | DB connection for async table |
+| `LARAGREP_ASYNC_TABLE` | `laragrep_async` | Table name for async records |
+| `LARAGREP_ASYNC_RETENTION_HOURS` | `24` | Auto-delete records after hours |
+| `LARAGREP_ASYNC_QUEUE` | `default` | Queue name for async jobs |
+| `LARAGREP_ASYNC_QUEUE_CONNECTION` | — | Queue connection (falls back to default) |
+| `LARAGREP_ASYNC_CHANNEL_PREFIX` | `laragrep` | Broadcasting channel prefix |
+| `LARAGREP_ASYNC_PRIVATE` | `false` | Use private broadcasting channels |
 
 ---
 

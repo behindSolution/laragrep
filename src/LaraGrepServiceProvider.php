@@ -5,6 +5,7 @@ namespace LaraGrep;
 use Illuminate\Support\ServiceProvider;
 use LaraGrep\AiClients\AnthropicClient;
 use LaraGrep\AiClients\OpenAiClient;
+use LaraGrep\Async\AsyncStore;
 use LaraGrep\Contracts\AiClientInterface;
 use LaraGrep\Contracts\ConversationStoreInterface;
 use LaraGrep\Contracts\MetadataLoaderInterface;
@@ -21,6 +22,7 @@ use LaraGrep\Recipe\RecipeStore;
 use LaraGrep\Prompt\ResponseParser;
 use LaraGrep\Query\QueryExecutor;
 use LaraGrep\Query\QueryValidator;
+use RuntimeException;
 
 class LaraGrepServiceProvider extends ServiceProvider
 {
@@ -200,6 +202,26 @@ class LaraGrepServiceProvider extends ServiceProvider
                 provider: (string) ($config['provider'] ?? 'openai'),
             );
         });
+
+        $this->app->singleton(AsyncStore::class, function ($app) {
+            $config = $app['config']->get('laragrep.async', []);
+
+            if (!is_array($config) || !($config['enabled'] ?? false)) {
+                return null;
+            }
+
+            $connectionName = $config['connection'] ?? null;
+
+            $connection = is_string($connectionName) && $connectionName !== ''
+                ? $app['db']->connection($connectionName)
+                : $app['db']->connection();
+
+            return new AsyncStore(
+                $connection,
+                (string) ($config['table'] ?? 'laragrep_async'),
+                (int) ($config['retention_hours'] ?? 24),
+            );
+        });
     }
 
     public function boot(): void
@@ -222,6 +244,26 @@ class LaraGrepServiceProvider extends ServiceProvider
 
         if (config('laragrep.monitor.enabled', false)) {
             $this->loadRoutesFrom(__DIR__ . '/../routes/monitor.php');
+        }
+
+        if (config('laragrep.async.enabled', false)) {
+            $this->validateAsyncQueueDriver();
+        }
+    }
+
+    private function validateAsyncQueueDriver(): void
+    {
+        $queueConnection = config('laragrep.async.queue_connection')
+            ?? config('queue.default', 'sync');
+
+        $driver = config("queue.connections.{$queueConnection}.driver", 'sync');
+
+        if ($driver === 'sync') {
+            throw new RuntimeException(
+                'LaraGrep async mode requires a real queue driver (redis, database, sqs, etc.). '
+                . "The queue connection \"{$queueConnection}\" uses the \"sync\" driver. "
+                . 'Set LARAGREP_ASYNC_QUEUE_CONNECTION to a non-sync connection or change your default QUEUE_CONNECTION.',
+            );
         }
     }
 
