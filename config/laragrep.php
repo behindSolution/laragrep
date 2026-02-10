@@ -241,7 +241,7 @@ return [
 
     'async' => [
         'enabled' => (bool) env('LARAGREP_ASYNC_ENABLED', false),
-        'connection' => env('LARAGREP_ASYNC_CONNECTION', 'laragrep'),
+        'connection' => env('LARAGREP_ASYNC_CONNECTION', 'sqlite'),
         'table' => env('LARAGREP_ASYNC_TABLE', 'laragrep_async'),
         'retention_hours' => (int) env('LARAGREP_ASYNC_RETENTION_HOURS', 24),
         'queue' => env('LARAGREP_ASYNC_QUEUE', 'default'),

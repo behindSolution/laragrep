@@ -85,10 +85,10 @@ class ProcessQuestionJob implements ShouldQueue
         $store->markCompleted($this->queryId, $result);
 
         AnswerReady::dispatch(
-            queryId: $this->queryId,
-            summary: $result['summary'],
-            conversationId: $this->conversationId,
-            recipeId: $recipeId,
+            $this->queryId,
+            $result['summary'],
+            $this->conversationId,
+            $recipeId,
         );
     }
 
@@ -104,8 +104,8 @@ class ProcessQuestionJob implements ShouldQueue
             $store->markFailed($this->queryId, $errorMessage);
 
             AnswerFailed::dispatch(
-                queryId: $this->queryId,
-                error: $errorMessage,
+                $this->queryId,
+                $errorMessage,
             );
         } catch (Throwable) {
             // Cleanup must never throw
