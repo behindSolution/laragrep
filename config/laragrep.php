@@ -227,6 +227,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Async Mode
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, all requests are processed asynchronously via a queue job.
+    | The HTTP endpoint returns immediately with a query_id and channel name.
+    | Results are delivered via broadcasting (WebSocket) and/or polling (GET).
+    |
+    | Requires a real queue driver (redis, database, sqs). Will throw an
+    | exception at boot if QUEUE_CONNECTION is set to "sync".
+    |
+    */
+
+    'async' => [
+        'enabled' => (bool) env('LARAGREP_ASYNC_ENABLED', false),
+        'connection' => env('LARAGREP_ASYNC_CONNECTION', 'sqlite'),
+        'table' => env('LARAGREP_ASYNC_TABLE', 'laragrep_async'),
+        'retention_hours' => (int) env('LARAGREP_ASYNC_RETENTION_HOURS', 24),
+        'queue' => env('LARAGREP_ASYNC_QUEUE', 'default'),
+        'queue_connection' => env('LARAGREP_ASYNC_QUEUE_CONNECTION'),
+        'channel_prefix' => env('LARAGREP_ASYNC_CHANNEL_PREFIX', 'laragrep'),
+        'private' => (bool) env('LARAGREP_ASYNC_PRIVATE', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Debug Mode
     |--------------------------------------------------------------------------
     |

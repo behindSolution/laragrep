@@ -6,6 +6,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Str;
+use LaraGrep\Async\AsyncStore;
+use LaraGrep\Async\ProcessQuestionJob;
 use LaraGrep\Contracts\RecipeStoreInterface;
 use LaraGrep\LaraGrep;
 use LaraGrep\Monitor\MonitorRecorder;
@@ -54,6 +56,30 @@ class QueryController extends Controller
 
         $userIdResolver = config('laragrep.user_id_resolver');
         $userId = is_callable($userIdResolver) ? $userIdResolver() : auth()->id();
+
+        if (config('laragrep.async.enabled', false)) {
+            $queryId = (string) Str::uuid();
+            $store = app(AsyncStore::class);
+
+            $store->create($queryId, [
+                'user_id' => $userId,
+                'scope' => $scope,
+                'question' => mb_substr($question, 0, 1000),
+                'conversation_id' => $conversationId,
+            ]);
+
+            ProcessQuestionJob::dispatch(
+                $queryId, $question, $scope, $conversationId, $userId, $debug,
+            )->onQueue(config('laragrep.async.queue', 'default'))
+             ->onConnection(config('laragrep.async.queue_connection'));
+
+            $channelPrefix = config('laragrep.async.channel_prefix', 'laragrep');
+
+            return response()->json([
+                'query_id' => $queryId,
+                'channel' => "{$channelPrefix}.{$queryId}",
+            ], 202);
+        }
 
         try {
             if ($this->recorder !== null) {
