@@ -4,6 +4,7 @@ namespace LaraGrep;
 
 use Illuminate\Support\ServiceProvider;
 use LaraGrep\AiClients\AnthropicClient;
+use LaraGrep\AiClients\FallbackClient;
 use LaraGrep\AiClients\OpenAiClient;
 use LaraGrep\Async\AsyncStore;
 use LaraGrep\Contracts\AiClientInterface;
@@ -32,33 +33,36 @@ class LaraGrepServiceProvider extends ServiceProvider
 
         $this->app->singleton(AiClientInterface::class, function ($app) {
             $config = $app['config']->get('laragrep', []);
-            $provider = strtolower((string) ($config['provider'] ?? 'openai'));
-            $apiKey = (string) ($config['api_key'] ?? '');
-            $model = (string) ($config['model'] ?? '');
-            $baseUrl = $config['base_url'] ?? null;
-
             $timeout = (int) ($config['timeout'] ?? 120);
 
-            return match ($provider) {
-                'anthropic' => new AnthropicClient(
-                    apiKey: $apiKey,
-                    model: $model ?: 'claude-sonnet-4-20250514',
-                    maxTokens: (int) ($config['max_tokens'] ?? 1024),
-                    baseUrl: is_string($baseUrl) && $baseUrl !== ''
-                        ? $baseUrl
-                        : 'https://api.anthropic.com/v1/messages',
-                    anthropicVersion: (string) ($config['anthropic_version'] ?? '2023-06-01'),
-                    timeout: $timeout,
-                ),
-                default => new OpenAiClient(
-                    apiKey: $apiKey,
-                    model: $model ?: 'gpt-4o-mini',
-                    baseUrl: is_string($baseUrl) && $baseUrl !== ''
-                        ? $baseUrl
-                        : 'https://api.openai.com/v1/chat/completions',
-                    timeout: $timeout,
-                ),
-            };
+            $primary = $this->buildAiClient(
+                provider: strtolower((string) ($config['provider'] ?? 'openai')),
+                apiKey: (string) ($config['api_key'] ?? ''),
+                model: (string) ($config['model'] ?? ''),
+                baseUrl: $config['base_url'] ?? null,
+                maxTokens: (int) ($config['max_tokens'] ?? 1024),
+                anthropicVersion: (string) ($config['anthropic_version'] ?? '2023-06-01'),
+                timeout: $timeout,
+            );
+
+            $fallback = $config['fallback'] ?? [];
+            $fallbackProvider = is_array($fallback) ? ($fallback['provider'] ?? null) : null;
+
+            if (!is_string($fallbackProvider) || $fallbackProvider === '') {
+                return $primary;
+            }
+
+            $fallbackClient = $this->buildAiClient(
+                provider: strtolower($fallbackProvider),
+                apiKey: (string) ($fallback['api_key'] ?? ''),
+                model: (string) ($fallback['model'] ?? ''),
+                baseUrl: $fallback['base_url'] ?? null,
+                maxTokens: (int) ($config['max_tokens'] ?? 1024),
+                anthropicVersion: (string) ($config['anthropic_version'] ?? '2023-06-01'),
+                timeout: $timeout,
+            );
+
+            return new FallbackClient([$primary, $fallbackClient]);
         });
 
         $this->app->singleton(MetadataLoaderInterface::class, function ($app) {
@@ -265,6 +269,37 @@ class LaraGrepServiceProvider extends ServiceProvider
                 . 'Set LARAGREP_ASYNC_QUEUE_CONNECTION to a non-sync connection or change your default QUEUE_CONNECTION.',
             );
         }
+    }
+
+    private function buildAiClient(
+        string $provider,
+        string $apiKey,
+        string $model,
+        mixed $baseUrl,
+        int $maxTokens,
+        string $anthropicVersion,
+        int $timeout,
+    ): AiClientInterface {
+        return match ($provider) {
+            'anthropic' => new AnthropicClient(
+                apiKey: $apiKey,
+                model: $model ?: 'claude-sonnet-4-20250514',
+                maxTokens: $maxTokens,
+                baseUrl: is_string($baseUrl) && $baseUrl !== ''
+                    ? $baseUrl
+                    : 'https://api.anthropic.com/v1/messages',
+                anthropicVersion: $anthropicVersion,
+                timeout: $timeout,
+            ),
+            default => new OpenAiClient(
+                apiKey: $apiKey,
+                model: $model ?: 'gpt-4o-mini',
+                baseUrl: is_string($baseUrl) && $baseUrl !== ''
+                    ? $baseUrl
+                    : 'https://api.openai.com/v1/chat/completions',
+                timeout: $timeout,
+            ),
+        };
     }
 
     private function resolveDriver($app, ?string $connectionName): string

@@ -317,6 +317,18 @@ LARAGREP_BASE_URL=http://localhost:11434/v1/chat/completions
 
 Ollama exposes an OpenAI-compatible API, so it works with the `openai` provider. The API key can be any non-empty string. This keeps your data fully local.
 
+### Fallback Provider
+
+If the primary provider fails (timeout, rate limit, API down), LaraGrep can automatically retry with a fallback:
+
+```env
+LARAGREP_FALLBACK_PROVIDER=anthropic
+LARAGREP_FALLBACK_API_KEY=sk-ant-...
+LARAGREP_FALLBACK_MODEL=claude-sonnet-4-20250514
+```
+
+Works in any direction — OpenAI primary with Anthropic fallback, or vice versa. When the primary succeeds, the fallback is never called. No cooldown, no circuit breaker — just tries in order.
+
 ### Schema Loading Mode
 
 | Mode     | Behavior                                              |
@@ -719,6 +731,10 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_BASE_URL` | — | Override API endpoint URL |
 | `LARAGREP_MAX_TOKENS` | `1024` | Max response tokens |
 | `LARAGREP_TIMEOUT` | `300` | HTTP timeout in seconds |
+| `LARAGREP_FALLBACK_PROVIDER` | — | Fallback AI provider |
+| `LARAGREP_FALLBACK_API_KEY` | — | Fallback API key |
+| `LARAGREP_FALLBACK_MODEL` | — | Fallback model identifier |
+| `LARAGREP_FALLBACK_BASE_URL` | — | Fallback API endpoint URL |
 | `LARAGREP_MAX_ITERATIONS` | `10` | Max query iterations per question |
 | `LARAGREP_MAX_ROWS` | `20` | Max rows per query (auto LIMIT) |
 | `LARAGREP_MAX_QUERY_TIME` | `3` | Max query execution time (seconds) |
@@ -761,6 +777,12 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 - Table references are validated against the known schema metadata.
 - The agent loop is capped at `max_iterations` to prevent runaway costs.
 - Protect the endpoint with middleware (e.g., `auth:sanctum`).
+
+## Testing
+
+```bash
+./vendor/bin/phpunit
+```
 
 ## License
 

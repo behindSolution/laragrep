@@ -37,6 +37,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Fallback Provider
+    |--------------------------------------------------------------------------
+    |
+    | Optional fallback AI provider. If the primary provider fails (timeout,
+    | rate limit, API down), LaraGrep automatically retries with the fallback.
+    | Leave provider as null to disable.
+    |
+    */
+
+    'fallback' => [
+        'provider' => env('LARAGREP_FALLBACK_PROVIDER'),
+        'api_key' => env('LARAGREP_FALLBACK_API_KEY'),
+        'model' => env('LARAGREP_FALLBACK_MODEL'),
+        'base_url' => env('LARAGREP_FALLBACK_BASE_URL'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Schema Loading Mode
     |--------------------------------------------------------------------------
     |
