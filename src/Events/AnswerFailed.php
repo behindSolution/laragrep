@@ -36,4 +36,16 @@ class AnswerFailed implements ShouldBroadcast
     {
         return 'laragrep.answer.failed';
     }
+
+    public function broadcastWhen(): bool
+    {
+        return $this->hasBroadcastDriver();
+    }
+
+    private function hasBroadcastDriver(): bool
+    {
+        $driver = config('broadcasting.default');
+
+        return is_string($driver) && $driver !== '' && $driver !== 'null' && $driver !== 'log';
+    }
 }
