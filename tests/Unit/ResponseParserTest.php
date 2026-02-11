@@ -89,6 +89,34 @@ class ResponseParserTest extends TestCase
         $this->assertSame([42], $result['queries'][0]['bindings']);
     }
 
+    public function test_parse_query_with_connection(): void
+    {
+        $json = json_encode([
+            'action' => 'query',
+            'queries' => [
+                ['query' => 'SELECT COUNT(*) FROM logs', 'bindings' => [], 'reason' => 'Count logs', 'connection' => 'secondary'],
+            ],
+        ]);
+
+        $result = $this->parser->parseAction($json);
+
+        $this->assertSame('secondary', $result['queries'][0]['connection']);
+    }
+
+    public function test_parse_query_connection_omitted_when_absent(): void
+    {
+        $json = json_encode([
+            'action' => 'query',
+            'queries' => [
+                ['query' => 'SELECT COUNT(*) FROM users', 'bindings' => []],
+            ],
+        ]);
+
+        $result = $this->parser->parseAction($json);
+
+        $this->assertArrayNotHasKey('connection', $result['queries'][0]);
+    }
+
     public function test_parse_query_reason_is_nullable(): void
     {
         $json = json_encode([

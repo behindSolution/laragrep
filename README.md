@@ -427,6 +427,47 @@ class OrdersTable
 ],
 ```
 
+### Multi-Connection Tables
+
+When some tables live in a different database, use `->connection()` to tell LaraGrep which connection to use for queries on that table:
+
+```php
+'tables' => [
+    Table::make('users')
+        ->description('Registered users.')
+        ->columns([
+            Column::id(),
+            Column::string('name'),
+            Column::string('email'),
+        ]),
+
+    Table::make('analytics_events')
+        ->description('Columnar analytics store.')
+        ->connection('clickhouse', 'ClickHouse')
+        ->columns([
+            Column::string('event_name'),
+            Column::timestamp('event_time'),
+            Column::bigInteger('user_id'),
+        ]),
+],
+```
+
+The second parameter is optional and describes the database engine. This is important when the external database uses a different SQL dialect (e.g., ClickHouse, PostgreSQL, SQLite) — the AI will generate compatible syntax for each table.
+
+```php
+// Connection only (same engine as the primary database)
+->connection('replica')
+
+// Connection + engine (different SQL dialect)
+->connection('clickhouse', 'ClickHouse')
+```
+
+When the AI encounters tables on different connections, it will:
+
+1. **Generate engine-compatible SQL** for each table
+2. **Include the connection name** in each query entry so the executor runs it on the right database
+3. **Avoid cross-connection JOINs** — instead, it queries each database separately and combines the results in the final answer
+
 ### Named Scopes (Contexts)
 
 Work with multiple databases or table sets:

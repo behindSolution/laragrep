@@ -64,4 +64,30 @@ class TokenEstimatorTest extends TestCase
 
         $this->assertGreaterThan(0, $result);
     }
+
+    // ── estimateTokenCount: content-aware ratio ─────────────────────
+
+    public function test_json_content_uses_lower_ratio(): void
+    {
+        $json = '{"id":1,"name":"John","email":"john@example.com"}';
+        $text = str_repeat('a', mb_strlen($json)); // same length, no structural chars
+
+        $jsonTokens = $this->estimator->estimateTokenCount($json);
+        $textTokens = $this->estimator->estimateTokenCount($text);
+
+        $this->assertGreaterThan($textTokens, $jsonTokens);
+    }
+
+    public function test_plain_text_uses_default_ratio(): void
+    {
+        // 20 chars, no structural characters → 20/4 = 5
+        $result = $this->estimator->estimateTokenCount('Hello world example!');
+
+        $this->assertSame(5, $result);
+    }
+
+    public function test_empty_string_returns_zero(): void
+    {
+        $this->assertSame(0, $this->estimator->estimateTokenCount(''));
+    }
 }

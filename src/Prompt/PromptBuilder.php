@@ -4,12 +4,21 @@ namespace LaraGrep\Prompt;
 
 class PromptBuilder
 {
-    public function buildUserPrompt(string $question): string
+    public function buildUserPrompt(string $question, bool $hasMultipleConnections = false): string
     {
+        $queryExample = $hasMultipleConnections
+            ? '{"query": "SELECT ...", "bindings": [], "reason": "Why this query is needed", "connection": "connection_name"}'
+            : '{"query": "SELECT ...", "bindings": [], "reason": "Why this query is needed"}';
+
+        $connectionRules = $hasMultipleConnections
+            ? PHP_EOL . '- Some tables are on different database connections. When querying a table that has a specific "Connection" defined in the schema, include its "connection" name in the query entry. Do not JOIN tables across different connections; query them separately and combine results in the final answer.'
+            . PHP_EOL . '- When a table specifies an "Engine" (e.g., ClickHouse, PostgreSQL), write SQL compatible with that engine\'s dialect and capabilities.'
+            : '';
+
         return implode(PHP_EOL . PHP_EOL, [
             'You are a database assistant. Answer the user\'s question by executing SQL queries.',
             'You MUST respond with a single JSON object per turn. Choose one of two actions:',
-            '1. Execute queries: {"action": "query", "queries": [{"query": "SELECT ...", "bindings": [], "reason": "Why this query is needed"}]}',
+            '1. Execute queries: {"action": "query", "queries": [' . $queryExample . ']}',
             '2. Provide the final answer: {"action": "answer", "summary": "Your human-readable answer here"}',
             'The "queries" array can contain one or more queries. Use multiple queries in a single turn when they are independent of each other (e.g., counting users and counting orders). Use separate turns when a query depends on the result of a previous one.',
             'Rules:'
@@ -22,7 +31,8 @@ class PromptBuilder
             . PHP_EOL . '- After receiving query results, analyze them and decide: run more queries if needed, or provide the final answer.'
             . PHP_EOL . '- Do not mention SQL, queries, bindings, or technical terms in the final summary. Give a clear, business-oriented answer.'
             . PHP_EOL . '- A LIMIT clause is automatically applied to queries without one. If you need more rows, add an explicit LIMIT. For counting, always use COUNT(*) instead of fetching all rows.'
-            . PHP_EOL . '- You can use these HTML tags in the summary: table, b, ul, ol, i, td, tr, th, thead, tbody. Do not use markdown.',
+            . PHP_EOL . '- You can use these HTML tags in the summary: table, b, ul, ol, i, td, tr, th, thead, tbody. Do not use markdown.'
+            . $connectionRules,
             'Question: ' . $question,
         ]);
     }
@@ -78,8 +88,18 @@ class PromptBuilder
                     ->implode(PHP_EOL);
 
                 $tableDescription = trim(($table['description'] ?? '') ?: '');
+                $tableConnection = trim(($table['connection'] ?? '') ?: '');
+                $tableEngine = trim(($table['engine'] ?? '') ?: '');
+
+                $connectionLine = match (true) {
+                    $tableConnection !== '' && $tableEngine !== '' => "Connection: {$tableConnection} (Engine: {$tableEngine})",
+                    $tableConnection !== '' => "Connection: {$tableConnection}",
+                    $tableEngine !== '' => "Engine: {$tableEngine}",
+                    default => null,
+                };
 
                 $sections = array_filter([
+                    $connectionLine,
                     $columnSummary !== '' ? "Columns:\n" . $columnSummary : null,
                     $relationshipSummary !== '' ? "Relationships:\n" . $relationshipSummary : null,
                 ]);
@@ -149,7 +169,7 @@ class PromptBuilder
             $messages[] = ['role' => $role, 'content' => $content];
         }
 
-        $messages[] = ['role' => 'user', 'content' => $this->buildUserPrompt($question)];
+        $messages[] = ['role' => 'user', 'content' => $this->buildUserPrompt($question, $this->hasMultipleConnections($tables))];
 
         return $messages;
     }
@@ -196,7 +216,7 @@ class PromptBuilder
             ->implode(PHP_EOL . PHP_EOL);
 
         $userContent = implode(PHP_EOL . PHP_EOL, [
-            $this->buildUserPrompt($question),
+            $this->buildUserPrompt($question, $this->hasMultipleConnections($tables)),
             'This question was previously answered using these queries:',
             $recipeContext,
             sprintf(
@@ -372,6 +392,17 @@ class PromptBuilder
         }
 
         return $parts !== [] ? implode(PHP_EOL, $parts) : 'No query results available.';
+    }
+
+    protected function hasMultipleConnections(array $tables): bool
+    {
+        foreach ($tables as $table) {
+            if (isset($table['connection']) && trim((string) $table['connection']) !== '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function buildDatabaseContextLine(?array $database): ?string

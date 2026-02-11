@@ -140,4 +140,76 @@ class QueryValidatorTest extends TestCase
         $this->assertCount(1, $tables);
         $this->assertSame(['users'], $tables);
     }
+
+    // ── CTE handling ─────────────────────────────────────────────────
+
+    public function test_extract_excludes_cte_aliases(): void
+    {
+        $tables = $this->validator->extractTableNames(
+            'WITH monthly AS (SELECT * FROM orders) SELECT * FROM monthly'
+        );
+
+        $this->assertSame(['orders'], $tables);
+    }
+
+    public function test_extract_excludes_multiple_cte_aliases(): void
+    {
+        $tables = $this->validator->extractTableNames(
+            'WITH user_totals AS (SELECT * FROM users), order_totals AS (SELECT * FROM orders) SELECT * FROM user_totals JOIN order_totals ON 1=1'
+        );
+
+        $this->assertContains('users', $tables);
+        $this->assertContains('orders', $tables);
+        $this->assertNotContains('user_totals', $tables);
+        $this->assertNotContains('order_totals', $tables);
+    }
+
+    public function test_extract_handles_recursive_cte(): void
+    {
+        $tables = $this->validator->extractTableNames(
+            'WITH RECURSIVE tree AS (SELECT * FROM categories UNION ALL SELECT c.* FROM categories c JOIN tree t ON c.parent_id = t.id) SELECT * FROM tree'
+        );
+
+        $this->assertContains('categories', $tables);
+        $this->assertNotContains('tree', $tables);
+    }
+
+    public function test_validate_passes_with_cte_using_known_tables(): void
+    {
+        $this->validator->validate(
+            'WITH recent AS (SELECT * FROM orders WHERE created_at > ?) SELECT * FROM recent',
+            ['orders']
+        );
+
+        $this->assertTrue(true);
+    }
+
+    // ── String literal / comment stripping ───────────────────────────
+
+    public function test_extract_ignores_table_names_in_string_literals(): void
+    {
+        $tables = $this->validator->extractTableNames(
+            "SELECT * FROM users WHERE description LIKE '%data from secret_table%'"
+        );
+
+        $this->assertSame(['users'], $tables);
+    }
+
+    public function test_extract_ignores_table_names_in_comments(): void
+    {
+        $tables = $this->validator->extractTableNames(
+            "SELECT * FROM users -- from secret_table"
+        );
+
+        $this->assertSame(['users'], $tables);
+    }
+
+    public function test_extract_ignores_table_names_in_block_comments(): void
+    {
+        $tables = $this->validator->extractTableNames(
+            "SELECT * FROM users /* JOIN secret_table ON 1=1 */"
+        );
+
+        $this->assertSame(['users'], $tables);
+    }
 }

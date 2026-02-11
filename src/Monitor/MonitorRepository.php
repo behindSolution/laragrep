@@ -113,12 +113,23 @@ class MonitorRepository
 
     protected function dailyUsage(Carbon $since): Collection
     {
+        $dateExpr = $this->dateExpression('created_at');
+
         return $this->connection->table($this->table)
             ->where('created_at', '>=', $since)
-            ->selectRaw("DATE(created_at) as date, count(*) as total, sum(case when status='error' then 1 else 0 end) as errors")
-            ->groupByRaw('DATE(created_at)')
+            ->selectRaw("{$dateExpr} as date, count(*) as total, sum(case when status='error' then 1 else 0 end) as errors")
+            ->groupByRaw($dateExpr)
             ->orderBy('date')
             ->get();
+    }
+
+    protected function dateExpression(string $column): string
+    {
+        return match ($this->connection->getDriverName()) {
+            'pgsql' => "{$column}::date",
+            'sqlsrv' => "CAST({$column} AS DATE)",
+            default => "DATE({$column})",
+        };
     }
 
     protected function storageMetrics(): array

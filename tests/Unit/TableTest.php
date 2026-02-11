@@ -76,10 +76,47 @@ class TableTest extends TestCase
         $this->assertArrayNotHasKey('relationships', $table->toArray());
     }
 
+    public function test_make_with_connection(): void
+    {
+        $table = Table::make('external_logs')->connection('secondary');
+
+        $arr = $table->toArray();
+
+        $this->assertSame('secondary', $arr['connection']);
+    }
+
+    public function test_connection_omitted_when_null(): void
+    {
+        $table = Table::make('users');
+
+        $this->assertArrayNotHasKey('connection', $table->toArray());
+    }
+
+    public function test_connection_with_engine(): void
+    {
+        $table = Table::make('analytics')->connection('clickhouse', 'ClickHouse');
+
+        $arr = $table->toArray();
+
+        $this->assertSame('clickhouse', $arr['connection']);
+        $this->assertSame('ClickHouse', $arr['engine']);
+    }
+
+    public function test_engine_omitted_when_not_provided(): void
+    {
+        $table = Table::make('logs')->connection('secondary');
+
+        $arr = $table->toArray();
+
+        $this->assertSame('secondary', $arr['connection']);
+        $this->assertArrayNotHasKey('engine', $arr);
+    }
+
     public function test_full_fluent_chain(): void
     {
         $table = Table::make('orders')
             ->description('Customer orders.')
+            ->connection('reporting', 'MySQL')
             ->columns([
                 Column::id(),
                 Column::bigInteger('user_id')->unsigned(),
@@ -94,6 +131,8 @@ class TableTest extends TestCase
 
         $this->assertSame('orders', $arr['name']);
         $this->assertSame('Customer orders.', $arr['description']);
+        $this->assertSame('reporting', $arr['connection']);
+        $this->assertSame('MySQL', $arr['engine']);
         $this->assertCount(4, $arr['columns']);
         $this->assertCount(1, $arr['relationships']);
     }

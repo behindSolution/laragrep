@@ -222,7 +222,7 @@ class LaraGrep
             foreach ($action['queries'] as $entry) {
                 try {
                     $this->queryValidator->validate($entry['query'], $knownTables);
-                    $execution = $this->queryExecutor->execute($entry['query'], $entry['bindings']);
+                    $execution = $this->queryExecutor->execute($entry['query'], $entry['bindings'], $entry['connection'] ?? null);
                 } catch (RuntimeException $e) {
                     $errorMsg = $e->getMessage();
                     $availableTables = implode(', ', $knownTables);

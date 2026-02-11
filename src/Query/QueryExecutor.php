@@ -23,22 +23,22 @@ class QueryExecutor
      * @param  array<int, mixed>  $bindings
      * @return array{results: array<int, array<string, mixed>>, queries: array<int, array<string, mixed>>}
      */
-    public function execute(string $query, array $bindings): array
+    public function execute(string $query, array $bindings, ?string $connection = null): array
     {
         $query = $this->applyRowLimit($query);
 
-        return $this->usingConnection(function (ConnectionInterface $connection) use ($query, $bindings) {
-            $connection->flushQueryLog();
-            $connection->enableQueryLog();
+        return $this->usingConnection(function (ConnectionInterface $conn) use ($query, $bindings) {
+            $conn->flushQueryLog();
+            $conn->enableQueryLog();
 
-            $this->applyQueryTimeout($connection);
+            $this->applyQueryTimeout($conn);
 
             try {
-                $results = collect($connection->select($query, $bindings))
+                $results = collect($conn->select($query, $bindings))
                     ->map(fn($row) => (array) $row)
                     ->all();
             } finally {
-                $queries = collect($connection->getQueryLog())
+                $queries = collect($conn->getQueryLog())
                     ->map(fn(array $entry) => [
                         'query' => $entry['query'] ?? '',
                         'bindings' => $entry['bindings'] ?? [],
@@ -46,15 +46,15 @@ class QueryExecutor
                     ])
                     ->all();
 
-                $connection->disableQueryLog();
-                $connection->flushQueryLog();
+                $conn->disableQueryLog();
+                $conn->flushQueryLog();
             }
 
             return [
                 'results' => $results,
                 'queries' => $queries,
             ];
-        });
+        }, $connection);
     }
 
     /**
@@ -99,22 +99,25 @@ class QueryExecutor
     /**
      * @template T
      * @param  callable(ConnectionInterface): T  $callback
+     * @param  string|null  $connectionOverride  Per-query connection override.
      * @return T
      */
-    protected function usingConnection(callable $callback): mixed
+    protected function usingConnection(callable $callback, ?string $connectionOverride = null): mixed
     {
+        $connectionName = $connectionOverride ?? $this->connectionName;
+
         $previous = null;
         $shouldRestore = false;
 
-        if (is_string($this->connectionName) && $this->connectionName !== '') {
+        if (is_string($connectionName) && $connectionName !== '') {
             $previous = DB::getDefaultConnection();
-            $shouldRestore = $previous !== $this->connectionName;
+            $shouldRestore = $previous !== $connectionName;
 
             if ($shouldRestore) {
-                DB::setDefaultConnection($this->connectionName);
+                DB::setDefaultConnection($connectionName);
             }
 
-            $connection = DB::connection($this->connectionName);
+            $connection = DB::connection($connectionName);
         } else {
             $connection = DB::connection();
         }

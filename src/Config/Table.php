@@ -6,6 +6,8 @@ class Table
 {
     protected string $name;
     protected string $description = '';
+    protected ?string $connection = null;
+    protected ?string $engine = null;
     protected array $columns = [];
     protected array $relationships = [];
 
@@ -22,6 +24,14 @@ class Table
     public function description(string $description): static
     {
         $this->description = $description;
+
+        return $this;
+    }
+
+    public function connection(string $connection, ?string $engine = null): static
+    {
+        $this->connection = $connection;
+        $this->engine = $engine;
 
         return $this;
     }
@@ -48,6 +58,14 @@ class Table
 
         if ($this->description !== '') {
             $result['description'] = $this->description;
+        }
+
+        if ($this->connection !== null) {
+            $result['connection'] = $this->connection;
+        }
+
+        if ($this->engine !== null) {
+            $result['engine'] = $this->engine;
         }
 
         $result['columns'] = array_map(

@@ -103,7 +103,8 @@ class ResponseParser
                 throw new RuntimeException(sprintf('Empty SQL query at index %d.', $index));
             }
 
-            if (!Str::startsWith(strtolower($query), 'select')) {
+            $lower = strtolower($query);
+            if (!Str::startsWith($lower, 'select') && !Str::startsWith($lower, 'with')) {
                 throw new RuntimeException('Only SELECT queries are allowed.');
             }
 
@@ -117,11 +118,21 @@ class ResponseParser
                 ? trim($entry['reason'])
                 : null;
 
-            $normalized[] = [
+            $connection = isset($entry['connection']) && is_string($entry['connection'])
+                ? trim($entry['connection'])
+                : null;
+
+            $item = [
                 'query' => $query,
                 'bindings' => array_values($bindings),
                 'reason' => $reason,
             ];
+
+            if ($connection !== null && $connection !== '') {
+                $item['connection'] = $connection;
+            }
+
+            $normalized[] = $item;
         }
 
         return [
