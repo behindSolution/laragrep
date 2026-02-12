@@ -85,6 +85,25 @@ class TableTest extends TestCase
         $this->assertSame('secondary', $arr['connection']);
     }
 
+    public function test_connection_with_closure(): void
+    {
+        $table = Table::make('orders')->connection(fn () => 'tenant_42');
+
+        $arr = $table->toArray();
+
+        $this->assertSame('tenant_42', $arr['connection']);
+    }
+
+    public function test_connection_closure_with_engine(): void
+    {
+        $table = Table::make('analytics')->connection(fn () => 'tenant_db', 'ClickHouse');
+
+        $arr = $table->toArray();
+
+        $this->assertSame('tenant_db', $arr['connection']);
+        $this->assertSame('ClickHouse', $arr['engine']);
+    }
+
     public function test_connection_omitted_when_null(): void
     {
         $table = Table::make('users');

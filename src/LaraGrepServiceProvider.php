@@ -67,7 +67,8 @@ class LaraGrepServiceProvider extends ServiceProvider
 
         $this->app->singleton(MetadataLoaderInterface::class, function ($app) {
             $config = $app['config']->get('laragrep', []);
-            $connectionName = $config['contexts']['default']['connection'] ?? null;
+            $connectionValue = $config['contexts']['default']['connection'] ?? null;
+            $connectionName = $connectionValue instanceof \Closure ? $connectionValue() : $connectionValue;
 
             $driver = $this->resolveDriver($app, $connectionName);
 
@@ -104,7 +105,8 @@ class LaraGrepServiceProvider extends ServiceProvider
 
         $this->app->singleton(QueryExecutor::class, function ($app) {
             $config = $app['config']->get('laragrep', []);
-            $defaultConnection = $config['contexts']['default']['connection'] ?? null;
+            $connectionValue = $config['contexts']['default']['connection'] ?? null;
+            $defaultConnection = $connectionValue instanceof \Closure ? $connectionValue() : $connectionValue;
 
             return new QueryExecutor(
                 connectionName: $defaultConnection,

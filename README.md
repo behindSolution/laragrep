@@ -468,6 +468,47 @@ When the AI encounters tables on different connections, it will:
 2. **Include the connection name** in each query entry so the executor runs it on the right database
 3. **Avoid cross-connection JOINs** — instead, it queries each database separately and combines the results in the final answer
 
+### Multi-Tenant / Dynamic Connections
+
+In multi-tenant applications where each tenant has its own database, the connection name is only known at runtime. Pass a `Closure` instead of a string to resolve the connection dynamically:
+
+```php
+'contexts' => [
+    'default' => [
+        'connection' => fn () => 'tenant_' . tenant()->id,
+        'tables' => [
+            Table::make('users')->columns([...]),
+            Table::make('orders')->columns([...]),
+        ],
+    ],
+],
+```
+
+The closure is evaluated per-request, so it works in HTTP (middleware sets the tenant), queue jobs, and artisan commands — as long as your tenant context is available.
+
+You can mix dynamic and static connections. For example, tenant tables on a dynamic connection and shared tables on a fixed central database:
+
+```php
+'contexts' => [
+    'default' => [
+        'connection' => fn () => app('tenant')->getConnectionName(),
+        'tables' => [
+            Table::make('orders')->columns([...]),
+
+            Table::make('plans')
+                ->connection('central')
+                ->columns([...]),
+        ],
+    ],
+],
+```
+
+Table-level connections also accept closures:
+
+```php
+Table::make('orders')->connection(fn () => 'tenant_' . tenant()->id)
+```
+
 ### Named Scopes (Contexts)
 
 Work with multiple databases or table sets:

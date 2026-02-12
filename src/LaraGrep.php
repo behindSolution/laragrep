@@ -44,7 +44,7 @@ class LaraGrep
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
         $maxIterations = (int) ($this->config['max_iterations'] ?? 10);
 
-        $this->queryExecutor->setConnection($scopeConfig['connection'] ?? null);
+        $this->queryExecutor->setConnection($this->resolveConnection($scopeConfig['connection'] ?? null));
 
         $tables = $this->resolveMetadata($scopeConfig);
         $tablesTotal = count($tables);
@@ -128,7 +128,7 @@ class LaraGrep
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
         $maxIterations = (int) ($this->config['max_iterations'] ?? 10);
 
-        $this->queryExecutor->setConnection($scopeConfig['connection'] ?? null);
+        $this->queryExecutor->setConnection($this->resolveConnection($scopeConfig['connection'] ?? null));
 
         $tables = $this->resolveMetadata($scopeConfig);
         $tablesTotal = count($tables);
@@ -339,7 +339,7 @@ class LaraGrep
 
         $autoTables = [];
         if ($this->metadataLoader !== null) {
-            $connection = $scopeConfig['connection'] ?? null;
+            $connection = $this->resolveConnection($scopeConfig['connection'] ?? null);
             $excludeTables = $scopeConfig['exclude_tables'] ?? [];
 
             if (is_string($excludeTables)) {
@@ -455,5 +455,14 @@ class LaraGrep
         $id = trim($id);
 
         return $id === '' ? null : $id;
+    }
+
+    protected function resolveConnection(mixed $connection): ?string
+    {
+        if ($connection instanceof Closure) {
+            $connection = $connection();
+        }
+
+        return is_string($connection) && $connection !== '' ? $connection : null;
     }
 }

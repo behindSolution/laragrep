@@ -6,7 +6,7 @@ class Table
 {
     protected string $name;
     protected string $description = '';
-    protected ?string $connection = null;
+    protected string|\Closure|null $connection = null;
     protected ?string $engine = null;
     protected array $columns = [];
     protected array $relationships = [];
@@ -28,7 +28,7 @@ class Table
         return $this;
     }
 
-    public function connection(string $connection, ?string $engine = null): static
+    public function connection(string|\Closure $connection, ?string $engine = null): static
     {
         $this->connection = $connection;
         $this->engine = $engine;
@@ -60,8 +60,12 @@ class Table
             $result['description'] = $this->description;
         }
 
-        if ($this->connection !== null) {
-            $result['connection'] = $this->connection;
+        $connection = $this->connection instanceof \Closure
+            ? ($this->connection)()
+            : $this->connection;
+
+        if ($connection !== null) {
+            $result['connection'] = $connection;
         }
 
         if ($this->engine !== null) {
