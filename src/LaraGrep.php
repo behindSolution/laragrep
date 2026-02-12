@@ -3,6 +3,7 @@
 namespace LaraGrep;
 
 use Closure;
+use Illuminate\Support\Facades\DB;
 use LaraGrep\Config\Table;
 use LaraGrep\Contracts\AiClientInterface;
 use LaraGrep\Contracts\ConversationStoreInterface;
@@ -44,9 +45,11 @@ class LaraGrep
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
         $maxIterations = (int) ($this->config['max_iterations'] ?? 10);
 
-        $this->queryExecutor->setConnection($this->resolveConnection($scopeConfig['connection'] ?? null));
+        $resolvedConnection = $this->resolveConnection($scopeConfig['connection'] ?? null);
+        $this->queryExecutor->setConnection($resolvedConnection);
 
         $tables = $this->resolveMetadata($scopeConfig);
+        $tables = $this->fillDefaultConnection($tables, $resolvedConnection);
         $tablesTotal = count($tables);
         $tables = $this->applySmartSchema($tables, $question, $scopeConfig);
         $this->lastSchemaStats = ['total' => $tablesTotal, 'filtered' => count($tables)];
@@ -128,9 +131,11 @@ class LaraGrep
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
         $maxIterations = (int) ($this->config['max_iterations'] ?? 10);
 
-        $this->queryExecutor->setConnection($this->resolveConnection($scopeConfig['connection'] ?? null));
+        $resolvedConnection = $this->resolveConnection($scopeConfig['connection'] ?? null);
+        $this->queryExecutor->setConnection($resolvedConnection);
 
         $tables = $this->resolveMetadata($scopeConfig);
+        $tables = $this->fillDefaultConnection($tables, $resolvedConnection);
         $tablesTotal = count($tables);
         $this->lastSchemaStats = ['total' => $tablesTotal, 'filtered' => $tablesTotal];
 
@@ -455,6 +460,32 @@ class LaraGrep
         $id = trim($id);
 
         return $id === '' ? null : $id;
+    }
+
+    protected function fillDefaultConnection(array $tables, ?string $scopeConnection): array
+    {
+        $hasExplicit = false;
+
+        foreach ($tables as $table) {
+            if (!empty($table['connection'])) {
+                $hasExplicit = true;
+                break;
+            }
+        }
+
+        if (!$hasExplicit) {
+            return $tables;
+        }
+
+        $defaultConnection = $scopeConnection ?? DB::getDefaultConnection();
+
+        foreach ($tables as &$table) {
+            if (empty($table['connection'])) {
+                $table['connection'] = $defaultConnection;
+            }
+        }
+
+        return $tables;
     }
 
     protected function resolveConnection(mixed $connection): ?string

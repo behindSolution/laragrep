@@ -11,7 +11,7 @@ class PromptBuilder
             : '{"query": "SELECT ...", "bindings": [], "reason": "Why this query is needed"}';
 
         $connectionRules = $hasMultipleConnections
-            ? PHP_EOL . '- Some tables are on different database connections. When querying a table that has a specific "Connection" defined in the schema, include its "connection" name in the query entry. Do not JOIN tables across different connections; query them separately and combine results in the final answer.'
+            ? PHP_EOL . '- CRITICAL: Tables are on different database connections (shown as "Connection: ..." in the schema). You MUST include the "connection" name in every query entry. NEVER JOIN tables that have different connections — query each connection separately and combine the results in your final answer.'
             . PHP_EOL . '- When a table specifies an "Engine" (e.g., ClickHouse, PostgreSQL), write SQL compatible with that engine\'s dialect and capabilities.'
             : '';
 
