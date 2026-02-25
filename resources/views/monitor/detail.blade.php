@@ -110,7 +110,12 @@
                 @foreach($steps as $i => $step)
                     <details class="bg-white rounded-lg border" {{ $i === 0 ? 'open' : '' }}>
                         <summary class="px-4 py-3 cursor-pointer hover:bg-gray-50 flex items-center justify-between">
-                            <span class="text-sm font-medium">Step {{ $i + 1 }}: {{ Str::limit($step['reason'] ?? 'No reason provided', 100) }}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">Step {{ $i + 1 }}: {{ Str::limit($step['reason'] ?? 'No reason provided', 100) }}</span>
+                                @if(!empty($step['connection']))
+                                    <span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">{{ $step['connection'] }}</span>
+                                @endif
+                            </div>
                             @if(isset($step['results_truncated']))
                                 <span class="text-xs text-amber-600">results truncated</span>
                             @endif
@@ -120,6 +125,12 @@
                                 <div class="mt-3">
                                     <span class="text-xs text-gray-500 uppercase tracking-wide">Reason</span>
                                     <p class="text-sm mt-1">{{ $step['reason'] }}</p>
+                                </div>
+                            @endif
+                            @if(!empty($step['connection']))
+                                <div>
+                                    <span class="text-xs text-gray-500 uppercase tracking-wide">Connection</span>
+                                    <span class="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">{{ $step['connection'] }}</span>
                                 </div>
                             @endif
                             <div>
@@ -159,27 +170,24 @@
             <summary class="px-4 py-3 cursor-pointer hover:bg-gray-50 text-sm font-semibold text-gray-700">
                 Raw Query Log ({{ count($debugQueries) }} queries)
             </summary>
-            <div class="px-4 pb-4 border-t">
-                <table class="w-full text-xs mt-3">
-                    <thead>
-                        <tr class="border-b">
-                            <th class="text-left py-1 pr-4 text-gray-500">#</th>
-                            <th class="text-left py-1 pr-4 text-gray-500">Query</th>
-                            <th class="text-left py-1 pr-4 text-gray-500">Bindings</th>
-                            <th class="text-right py-1 text-gray-500">Time</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($debugQueries as $i => $q)
-                            <tr class="border-b">
-                                <td class="py-1 pr-4 text-gray-400">{{ $i + 1 }}</td>
-                                <td class="py-1 pr-4 font-mono">{{ Str::limit($q['query'] ?? '', 120) }}</td>
-                                <td class="py-1 pr-4 font-mono text-gray-500">{{ json_encode($q['bindings'] ?? []) }}</td>
-                                <td class="py-1 text-right text-gray-500">{{ isset($q['time']) ? number_format($q['time'], 2) . 'ms' : '-' }}</td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+            <div class="px-4 pb-4 border-t mt-3 space-y-3">
+                @foreach($debugQueries as $i => $q)
+                    <div class="border rounded p-3 bg-gray-50">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-gray-400 font-medium">#{{ $i + 1 }}</span>
+                                @if(!empty($q['connection']))
+                                    <span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">{{ $q['connection'] }}</span>
+                                @endif
+                            </div>
+                            <span class="text-xs text-gray-500">{{ isset($q['time']) ? number_format($q['time'], 2) . 'ms' : '-' }}</span>
+                        </div>
+                        <pre class="text-xs font-mono whitespace-pre-wrap break-all bg-white p-2 rounded border">{{ $q['query'] ?? '' }}</pre>
+                        @if(!empty($q['bindings']))
+                            <div class="mt-1.5 text-xs font-mono text-gray-500">Bindings: {{ json_encode($q['bindings'], JSON_UNESCAPED_UNICODE) }}</div>
+                        @endif
+                    </div>
+                @endforeach
             </div>
         </details>
     @endif

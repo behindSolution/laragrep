@@ -225,20 +225,28 @@ class LaraGrep
             $batchResults = [];
 
             foreach ($action['queries'] as $entry) {
+                $entryConnection = $entry['connection'] ?? null;
+
                 try {
                     $this->queryValidator->validate($entry['query'], $knownTables);
-                    $execution = $this->queryExecutor->execute($entry['query'], $entry['bindings'], $entry['connection'] ?? null);
+                    $execution = $this->queryExecutor->execute($entry['query'], $entry['bindings'], $entryConnection);
                 } catch (RuntimeException $e) {
                     $errorMsg = $e->getMessage();
                     $availableTables = implode(', ', $knownTables);
 
-                    $executedSteps[] = [
+                    $step = [
                         'query' => $entry['query'],
                         'bindings' => $entry['bindings'],
                         'results' => [],
                         'reason' => $entry['reason'] ?? null,
                         'error' => $errorMsg,
                     ];
+
+                    if ($entryConnection !== null) {
+                        $step['connection'] = $entryConnection;
+                    }
+
+                    $executedSteps[] = $step;
 
                     $batchResults[] = [
                         'query' => $entry['query'],
@@ -248,19 +256,29 @@ class LaraGrep
                     continue;
                 }
 
-                $executedSteps[] = [
+                $step = [
                     'query' => $entry['query'],
                     'bindings' => $entry['bindings'],
                     'results' => $execution['results'],
                     'reason' => $entry['reason'] ?? null,
                 ];
 
+                if ($entryConnection !== null) {
+                    $step['connection'] = $entryConnection;
+                }
+
+                $executedSteps[] = $step;
+
                 $batchResults[] = [
                     'query' => $entry['query'],
                     'results' => $execution['results'],
                 ];
 
-                $debugQueries = array_merge($debugQueries, $execution['queries']);
+                $queriesWithConnection = $entryConnection !== null
+                    ? array_map(fn($q) => array_merge($q, ['connection' => $entryConnection]), $execution['queries'])
+                    : $execution['queries'];
+
+                $debugQueries = array_merge($debugQueries, $queriesWithConnection);
             }
 
             if ($onStep !== null) {
