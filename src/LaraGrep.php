@@ -230,7 +230,7 @@ class LaraGrep
                 try {
                     $this->queryValidator->validate($entry['query'], $knownTables);
                     $execution = $this->queryExecutor->execute($entry['query'], $entry['bindings'], $entryConnection);
-                } catch (RuntimeException $e) {
+                } catch (\Throwable $e) {
                     $errorMsg = $e->getMessage();
                     $availableTables = implode(', ', $knownTables);
 
@@ -500,6 +500,7 @@ class LaraGrep
         foreach ($tables as &$table) {
             if (empty($table['connection'])) {
                 $table['connection'] = $defaultConnection;
+                $table['connection_default'] = true;
             }
         }
 
