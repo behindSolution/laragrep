@@ -11,7 +11,8 @@ class PromptBuilder
             : '{"query": "SELECT ...", "bindings": [], "reason": "Why this query is needed"}';
 
         $connectionRules = $hasMultipleConnections
-            ? PHP_EOL . '- CRITICAL: Tables are on different database connections (shown as "Connection: ..." in the schema). You MUST include the "connection" name in every query entry. NEVER JOIN tables that have different connections — query each connection separately and combine the results in your final answer.'
+            ? PHP_EOL . '- CRITICAL: Tables are on different database connections (shown as "Connection: ..." in the schema). Connections marked "(primary)" are on the default database — do NOT include a "connection" field for them. For all other connections, you MUST include the "connection" name in the query entry.'
+            . PHP_EOL . '- CRITICAL: NEVER combine tables from different connections in a single query — no JOINs, no subqueries, no IN (SELECT ...) clauses across connections. Query each connection separately and combine the results in your final answer.'
             . PHP_EOL . '- When a table specifies an "Engine" (e.g., ClickHouse, PostgreSQL), write SQL compatible with that engine\'s dialect and capabilities.'
             : '';
 
@@ -90,10 +91,13 @@ class PromptBuilder
                 $tableDescription = trim(($table['description'] ?? '') ?: '');
                 $tableConnection = trim(($table['connection'] ?? '') ?: '');
                 $tableEngine = trim(($table['engine'] ?? '') ?: '');
+                $isPrimary = !empty($table['connection_default']);
+
+                $connectionLabel = $isPrimary ? "{$tableConnection} (primary)" : $tableConnection;
 
                 $connectionLine = match (true) {
-                    $tableConnection !== '' && $tableEngine !== '' => "Connection: {$tableConnection} (Engine: {$tableEngine})",
-                    $tableConnection !== '' => "Connection: {$tableConnection}",
+                    $tableConnection !== '' && $tableEngine !== '' => "Connection: {$connectionLabel} (Engine: {$tableEngine})",
+                    $tableConnection !== '' => "Connection: {$connectionLabel}",
                     $tableEngine !== '' => "Engine: {$tableEngine}",
                     default => null,
                 };
