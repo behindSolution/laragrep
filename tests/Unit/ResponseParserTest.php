@@ -223,4 +223,97 @@ class ResponseParserTest extends TestCase
 
         $this->parser->parseTableSelection('{"result": "users"}');
     }
+
+    // ── parseClarification: proceed ───────────────────────────────
+
+    public function test_parse_clarification_proceed(): void
+    {
+        $result = $this->parser->parseClarification('{"action": "proceed"}');
+
+        $this->assertSame(['action' => 'proceed'], $result);
+    }
+
+    public function test_parse_clarification_proceed_strips_markdown_fences(): void
+    {
+        $result = $this->parser->parseClarification("```json\n{\"action\": \"proceed\"}\n```");
+
+        $this->assertSame(['action' => 'proceed'], $result);
+    }
+
+    // ── parseClarification: clarification ───────────────────────
+
+    public function test_parse_clarification_with_questions(): void
+    {
+        $json = json_encode([
+            'action' => 'clarification',
+            'questions' => ['What date range?', 'Which store?'],
+        ]);
+
+        $result = $this->parser->parseClarification($json);
+
+        $this->assertSame('clarification', $result['action']);
+        $this->assertSame(['What date range?', 'Which store?'], $result['questions']);
+    }
+
+    public function test_parse_clarification_filters_empty_questions(): void
+    {
+        $json = json_encode([
+            'action' => 'clarification',
+            'questions' => ['What date range?', '', '  '],
+        ]);
+
+        $result = $this->parser->parseClarification($json);
+
+        $this->assertSame(['What date range?'], $result['questions']);
+    }
+
+    public function test_parse_clarification_extracts_first_json(): void
+    {
+        $content = 'Here is my analysis: {"action": "clarification", "questions": ["Which period?"]} end.';
+
+        $result = $this->parser->parseClarification($content);
+
+        $this->assertSame('clarification', $result['action']);
+        $this->assertSame(['Which period?'], $result['questions']);
+    }
+
+    // ── parseClarification: invalid ─────────────────────────────
+
+    public function test_parse_clarification_invalid_json_throws(): void
+    {
+        $this->expectException(RuntimeException::class);
+
+        $this->parser->parseClarification('not json');
+    }
+
+    public function test_parse_clarification_unknown_action_throws(): void
+    {
+        $this->expectException(RuntimeException::class);
+
+        $this->parser->parseClarification('{"action": "query"}');
+    }
+
+    public function test_parse_clarification_empty_questions_throws(): void
+    {
+        $this->expectException(RuntimeException::class);
+
+        $this->parser->parseClarification('{"action": "clarification", "questions": []}');
+    }
+
+    public function test_parse_clarification_missing_questions_throws(): void
+    {
+        $this->expectException(RuntimeException::class);
+
+        $this->parser->parseClarification('{"action": "clarification"}');
+    }
+
+    public function test_parse_clarification_all_blank_questions_throws(): void
+    {
+        $this->expectException(RuntimeException::class);
+
+        $this->parser->parseClarification(json_encode([
+            'action' => 'clarification',
+            'questions' => ['', '  '],
+        ]));
+    }
 }

@@ -18,6 +18,8 @@
             <h2 class="text-lg font-semibold">{{ $entry->question }}</h2>
             @if($entry->status === 'success')
                 <span class="inline-block px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">success</span>
+            @elseif($entry->status === 'clarification')
+                <span class="inline-block px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">clarification</span>
             @else
                 <span class="inline-block px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">error</span>
             @endif
@@ -102,93 +104,109 @@
         </div>
     @endif
 
-    {{-- Agent Loop Steps --}}
-    @if(count($steps) > 0)
-        <div class="mb-4">
-            <h3 class="text-sm font-semibold text-gray-700 mb-3">Agent Loop Steps</h3>
-            <div class="space-y-3">
-                @foreach($steps as $i => $step)
-                    <details class="bg-white rounded-lg border" {{ $i === 0 ? 'open' : '' }}>
-                        <summary class="px-4 py-3 cursor-pointer hover:bg-gray-50 flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <span class="text-sm font-medium">Step {{ $i + 1 }}: {{ Str::limit($step['reason'] ?? 'No reason provided', 100) }}</span>
+    {{-- Clarification Questions --}}
+    @if($entry->status === 'clarification' && $entry->summary)
+        <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+            <h3 class="text-sm font-semibold text-amber-700 mb-2">Clarification Questions</h3>
+            <ul class="list-disc list-inside space-y-1">
+                @foreach(explode("\n", $entry->summary) as $cq)
+                    @if(trim($cq) !== '')
+                        <li class="text-sm text-amber-800">{{ trim($cq) }}</li>
+                    @endif
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
+    @if($entry->status !== 'clarification')
+        {{-- Agent Loop Steps --}}
+        @if(count($steps) > 0)
+            <div class="mb-4">
+                <h3 class="text-sm font-semibold text-gray-700 mb-3">Agent Loop Steps</h3>
+                <div class="space-y-3">
+                    @foreach($steps as $i => $step)
+                        <details class="bg-white rounded-lg border" {{ $i === 0 ? 'open' : '' }}>
+                            <summary class="px-4 py-3 cursor-pointer hover:bg-gray-50 flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">Step {{ $i + 1 }}: {{ Str::limit($step['reason'] ?? 'No reason provided', 100) }}</span>
+                                    @if(!empty($step['connection']))
+                                        <span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">{{ $step['connection'] }}</span>
+                                    @endif
+                                </div>
+                                @if(isset($step['results_truncated']))
+                                    <span class="text-xs text-amber-600">results truncated</span>
+                                @endif
+                            </summary>
+                            <div class="px-4 pb-4 border-t space-y-3">
+                                @if(!empty($step['reason']))
+                                    <div class="mt-3">
+                                        <span class="text-xs text-gray-500 uppercase tracking-wide">Reason</span>
+                                        <p class="text-sm mt-1">{{ $step['reason'] }}</p>
+                                    </div>
+                                @endif
                                 @if(!empty($step['connection']))
-                                    <span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">{{ $step['connection'] }}</span>
+                                    <div>
+                                        <span class="text-xs text-gray-500 uppercase tracking-wide">Connection</span>
+                                        <span class="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">{{ $step['connection'] }}</span>
+                                    </div>
+                                @endif
+                                <div>
+                                    <span class="text-xs text-gray-500 uppercase tracking-wide">SQL Query</span>
+                                    <pre class="mt-1 text-sm bg-gray-50 p-3 rounded overflow-x-auto font-mono">{{ $step['query'] ?? '' }}</pre>
+                                </div>
+                                @if(!empty($step['bindings']))
+                                    <div>
+                                        <span class="text-xs text-gray-500 uppercase tracking-wide">Bindings</span>
+                                        <pre class="mt-1 text-sm bg-gray-50 p-3 rounded overflow-x-auto font-mono">{{ json_encode($step['bindings'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
+                                    </div>
+                                @endif
+                                @if(isset($step['results']))
+                                    <div>
+                                        <span class="text-xs text-gray-500 uppercase tracking-wide">Results ({{ count($step['results']) }} rows)</span>
+                                        <pre class="mt-1 text-sm bg-gray-50 p-3 rounded overflow-x-auto font-mono max-h-64">{{ json_encode($step['results'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
+                                    </div>
                                 @endif
                             </div>
-                            @if(isset($step['results_truncated']))
-                                <span class="text-xs text-amber-600">results truncated</span>
-                            @endif
-                        </summary>
-                        <div class="px-4 pb-4 border-t space-y-3">
-                            @if(!empty($step['reason']))
-                                <div class="mt-3">
-                                    <span class="text-xs text-gray-500 uppercase tracking-wide">Reason</span>
-                                    <p class="text-sm mt-1">{{ $step['reason'] }}</p>
+                        </details>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
+        {{-- Summary --}}
+        @if($entry->summary)
+            <div class="bg-white rounded-lg border p-4 mb-4">
+                <h3 class="text-sm font-semibold text-gray-700 mb-2">Final Answer</h3>
+                <div class="text-sm prose max-w-none whitespace-pre-line">{{ $entry->summary }}</div>
+            </div>
+        @endif
+
+        {{-- Debug Queries --}}
+        @if(count($debugQueries) > 0)
+            <details class="bg-white rounded-lg border mb-4">
+                <summary class="px-4 py-3 cursor-pointer hover:bg-gray-50 text-sm font-semibold text-gray-700">
+                    Raw Query Log ({{ count($debugQueries) }} queries)
+                </summary>
+                <div class="px-4 pb-4 border-t mt-3 space-y-3">
+                    @foreach($debugQueries as $i => $q)
+                        <div class="border rounded p-3 bg-gray-50">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs text-gray-400 font-medium">#{{ $i + 1 }}</span>
+                                    @if(!empty($q['connection']))
+                                        <span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">{{ $q['connection'] }}</span>
+                                    @endif
                                 </div>
-                            @endif
-                            @if(!empty($step['connection']))
-                                <div>
-                                    <span class="text-xs text-gray-500 uppercase tracking-wide">Connection</span>
-                                    <span class="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">{{ $step['connection'] }}</span>
-                                </div>
-                            @endif
-                            <div>
-                                <span class="text-xs text-gray-500 uppercase tracking-wide">SQL Query</span>
-                                <pre class="mt-1 text-sm bg-gray-50 p-3 rounded overflow-x-auto font-mono">{{ $step['query'] ?? '' }}</pre>
+                                <span class="text-xs text-gray-500">{{ isset($q['time']) ? number_format($q['time'], 2) . 'ms' : '-' }}</span>
                             </div>
-                            @if(!empty($step['bindings']))
-                                <div>
-                                    <span class="text-xs text-gray-500 uppercase tracking-wide">Bindings</span>
-                                    <pre class="mt-1 text-sm bg-gray-50 p-3 rounded overflow-x-auto font-mono">{{ json_encode($step['bindings'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
-                                </div>
-                            @endif
-                            @if(isset($step['results']))
-                                <div>
-                                    <span class="text-xs text-gray-500 uppercase tracking-wide">Results ({{ count($step['results']) }} rows)</span>
-                                    <pre class="mt-1 text-sm bg-gray-50 p-3 rounded overflow-x-auto font-mono max-h-64">{{ json_encode($step['results'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
-                                </div>
+                            <pre class="text-xs font-mono whitespace-pre-wrap break-all bg-white p-2 rounded border">{{ $q['query'] ?? '' }}</pre>
+                            @if(!empty($q['bindings']))
+                                <div class="mt-1.5 text-xs font-mono text-gray-500">Bindings: {{ json_encode($q['bindings'], JSON_UNESCAPED_UNICODE) }}</div>
                             @endif
                         </div>
-                    </details>
-                @endforeach
-            </div>
-        </div>
-    @endif
-
-    {{-- Summary --}}
-    @if($entry->summary)
-        <div class="bg-white rounded-lg border p-4 mb-4">
-            <h3 class="text-sm font-semibold text-gray-700 mb-2">Final Answer</h3>
-            <div class="text-sm prose max-w-none whitespace-pre-line">{{ $entry->summary }}</div>
-        </div>
-    @endif
-
-    {{-- Debug Queries --}}
-    @if(count($debugQueries) > 0)
-        <details class="bg-white rounded-lg border mb-4">
-            <summary class="px-4 py-3 cursor-pointer hover:bg-gray-50 text-sm font-semibold text-gray-700">
-                Raw Query Log ({{ count($debugQueries) }} queries)
-            </summary>
-            <div class="px-4 pb-4 border-t mt-3 space-y-3">
-                @foreach($debugQueries as $i => $q)
-                    <div class="border rounded p-3 bg-gray-50">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center gap-2">
-                                <span class="text-xs text-gray-400 font-medium">#{{ $i + 1 }}</span>
-                                @if(!empty($q['connection']))
-                                    <span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">{{ $q['connection'] }}</span>
-                                @endif
-                            </div>
-                            <span class="text-xs text-gray-500">{{ isset($q['time']) ? number_format($q['time'], 2) . 'ms' : '-' }}</span>
-                        </div>
-                        <pre class="text-xs font-mono whitespace-pre-wrap break-all bg-white p-2 rounded border">{{ $q['query'] ?? '' }}</pre>
-                        @if(!empty($q['bindings']))
-                            <div class="mt-1.5 text-xs font-mono text-gray-500">Bindings: {{ json_encode($q['bindings'], JSON_UNESCAPED_UNICODE) }}</div>
-                        @endif
-                    </div>
-                @endforeach
-            </div>
-        </details>
+                    @endforeach
+                </div>
+            </details>
+        @endif
     @endif
 @endsection

@@ -107,6 +107,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Question Clarification
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, LaraGrep analyzes the user's question before running the
+    | agent loop. If the question is vague or missing required context (based
+    | on clarification_rules defined per context), the AI returns clarification
+    | questions instead of proceeding with the query.
+    |
+    */
+
+    'clarification' => [
+        'enabled' => (bool) env('LARAGREP_CLARIFICATION_ENABLED', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Smart Schema
     |--------------------------------------------------------------------------
     |
@@ -184,6 +200,10 @@ return [
             'database' => [
                 'type' => env('LARAGREP_DATABASE_TYPE', ''),
                 'name' => env('LARAGREP_DATABASE_NAME', env('DB_DATABASE', '')),
+            ],
+            'clarification_rules' => [
+                // 'Always ask for a date range when the question involves time-based data',
+                // 'Always ask which store/branch if not specified',
             ],
             'tables' => [
                 // Define your table metadata using fluent classes. Example:

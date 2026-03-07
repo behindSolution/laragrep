@@ -378,6 +378,56 @@ class PromptBuilder
         ];
     }
 
+    /**
+     * Build messages for the clarification analysis call.
+     * The AI checks if the question has enough context based on the rules.
+     *
+     * @return array<int, array{role: string, content: string}>
+     */
+    public function buildClarificationMessages(
+        string $question,
+        array $tables,
+        array $rules,
+        string $userLanguage = 'en',
+    ): array {
+        $tableList = collect($tables)
+            ->map(function (array $table) {
+                $name = $table['name'] ?? '';
+                $description = trim(($table['description'] ?? '') ?: '');
+
+                return $description !== ''
+                    ? sprintf('- %s: %s', $name, $description)
+                    : sprintf('- %s', $name);
+            })
+            ->implode(PHP_EOL);
+
+        $rulesList = collect($rules)
+            ->map(fn(string $rule, int $i) => sprintf('%d. %s', $i + 1, $rule))
+            ->implode(PHP_EOL);
+
+        return [
+            [
+                'role' => 'system',
+                'content' => 'You are a question analyzer. Your job is to check if the user\'s question has enough context to be answered accurately, based on the provided rules. If important information is missing according to the rules, ask clarification questions. If the question is clear enough, proceed.',
+            ],
+            [
+                'role' => 'user',
+                'content' => implode(PHP_EOL . PHP_EOL, [
+                    'Clarification rules:',
+                    $rulesList,
+                    'Available tables:',
+                    $tableList,
+                    'User language: ' . $userLanguage,
+                    'Question: ' . $question,
+                    'Analyze the question against the rules above. Respond with ONLY a JSON object:',
+                    '- If the question needs clarification: {"action": "clarification", "questions": ["question1", "question2"]}',
+                    '- If the question is clear enough: {"action": "proceed"}',
+                    'Write the clarification questions in the user\'s language (' . $userLanguage . ').',
+                ]),
+            ],
+        ];
+    }
+
     protected function summarizeStepsForFormat(array $steps): string
     {
         $parts = [];

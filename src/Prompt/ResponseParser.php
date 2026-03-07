@@ -141,6 +141,65 @@ class ResponseParser
         ];
     }
 
+    /**
+     * Parse the AI response from a clarification analysis call.
+     *
+     * @return array{action: 'clarification'|'proceed', questions?: string[]}
+     *
+     * @throws RuntimeException
+     */
+    public function parseClarification(string $content): array
+    {
+        $content = trim($content);
+        $content = preg_replace('/^```(?:json)?\s*/im', '', $content);
+        $content = preg_replace('/\s*```\s*$/m', '', $content);
+        $content = trim($content);
+
+        $decoded = json_decode($content, true);
+
+        if (!is_array($decoded)) {
+            $firstJson = $this->extractFirstJson($content);
+
+            if ($firstJson !== null) {
+                $decoded = json_decode($firstJson, true);
+            }
+        }
+
+        if (!is_array($decoded)) {
+            throw new RuntimeException('Clarification response was not valid JSON.');
+        }
+
+        $action = $decoded['action'] ?? null;
+
+        if (!is_string($action) || !in_array($action, ['clarification', 'proceed'], true)) {
+            throw new RuntimeException('Clarification response must include "action" as "clarification" or "proceed".');
+        }
+
+        if ($action === 'proceed') {
+            return ['action' => 'proceed'];
+        }
+
+        $questions = $decoded['questions'] ?? null;
+
+        if (!is_array($questions) || $questions === []) {
+            throw new RuntimeException('Clarification action must include a non-empty "questions" array.');
+        }
+
+        $filtered = array_values(array_filter(
+            array_map(fn($q) => is_string($q) ? trim($q) : '', $questions),
+            fn($q) => $q !== '',
+        ));
+
+        if ($filtered === []) {
+            throw new RuntimeException('Clarification action must include a non-empty "questions" array.');
+        }
+
+        return [
+            'action' => 'clarification',
+            'questions' => $filtered,
+        ];
+    }
+
     private function extractFirstJson(string $content): ?string
     {
         $start = strpos($content, '{');

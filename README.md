@@ -558,6 +558,81 @@ LARAGREP_SMART_SCHEMA=20
 
 Activates automatically when the table count reaches the threshold. With 200 tables and only 5 relevant, this reduces token usage by ~60%.
 
+### Question Clarification
+
+When users ask vague questions ("Show me the sales"), the AI may guess filters or return overly generic results. Clarification adds a pre-agent-loop step that analyzes the question against developer-defined rules and asks for missing context before proceeding.
+
+**Enable:**
+
+```env
+LARAGREP_CLARIFICATION_ENABLED=true
+```
+
+**Define rules per context:**
+
+```php
+'contexts' => [
+    'default' => [
+        'clarification_rules' => [
+            'Always ask for a date range when the question involves time-based data',
+            'Always ask which store/branch if not specified',
+        ],
+        'tables' => [...],
+    ],
+],
+```
+
+**Flow:**
+
+```
+User question → AI checks against rules → Missing context?
+  ├─ YES → Returns clarification questions (no agent loop runs)
+  └─ NO  → Proceeds to answerQuestion() normally
+```
+
+**Clarification response:**
+
+```json
+{
+    "action": "clarification",
+    "questions": ["What date range?", "Which store?"],
+    "original_question": "Show me the sales",
+    "conversation_id": "uuid"
+}
+```
+
+The frontend can display these questions, collect the answers, and resubmit with a more specific question (e.g., "Show me the sales for Store A in January 2026").
+
+**Programmatic usage:**
+
+```php
+$laraGrep = app(LaraGrep::class);
+
+$clarification = $laraGrep->clarifyQuestion('Show me the sales', 'default');
+
+if ($clarification !== null) {
+    // Ask the user for more context
+    // $clarification['questions'] contains the clarification questions
+} else {
+    // Question is clear — proceed normally
+    $answer = $laraGrep->answerQuestion('Show me the sales');
+}
+```
+
+**Token usage impact:**
+
+The clarification call is lightweight — it sends only table names and descriptions (no columns or relationships), plus the rules and question. Compared to the agent loop:
+
+| Call | Input (typical) | Output (typical) |
+|---|---|---|
+| Clarification | ~200-400 tokens | ~15-40 tokens |
+| Smart Schema Filter | ~150-300 tokens | ~15-30 tokens |
+| Agent Loop (per iteration) | ~500-2000+ tokens | ~100-300 tokens |
+
+When the question is clear ("proceed"), the overhead is a single lightweight API call (~200-400 input tokens). When clarification is triggered, it **saves** the entire agent loop cost (potentially 3-10 iterations) by catching vague questions early.
+
+With the feature disabled or no `clarification_rules` defined, zero API calls are made — `clarifyQuestion()` returns `null` immediately.
+
 ### Conversation Persistence
 
 Multi-turn conversations are enabled by default. Previous questions and answers are sent as context for follow-ups.
@@ -831,6 +906,7 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_MAX_ROWS` | `20` | Max rows per query (auto LIMIT) |
 | `LARAGREP_MAX_QUERY_TIME` | `3` | Max query execution time (seconds) |
 | `LARAGREP_SMART_SCHEMA` | — | Table count threshold for smart filtering |
+| `LARAGREP_CLARIFICATION_ENABLED` | `false` | Enable pre-query question clarification |
 | `LARAGREP_SCHEMA_MODE` | `manual` | Schema loading mode |
 | `LARAGREP_USER_LANGUAGE` | `en` | AI response language |
 | `LARAGREP_CONNECTION` | — | Database connection name |

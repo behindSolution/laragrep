@@ -57,6 +57,26 @@ class QueryController extends Controller
         $userIdResolver = config('laragrep.user_id_resolver');
         $userId = is_callable($userIdResolver) ? $userIdResolver() : auth()->id();
 
+        if (config('laragrep.clarification.enabled', false)) {
+            try {
+                $clarification = ($this->recorder !== null)
+                    ? $this->recorder->clarifyQuestion($question, $scope, $userId)
+                    : $this->service->clarifyQuestion($question, $scope);
+
+                if ($clarification !== null) {
+                    $response = $clarification;
+
+                    if ($conversationId !== null) {
+                        $response['conversation_id'] = $conversationId;
+                    }
+
+                    return response()->json($response);
+                }
+            } catch (Throwable) {
+                // Clarification failure should never block the main flow
+            }
+        }
+
         if (config('laragrep.async.enabled', false)) {
             $queryId = (string) Str::uuid();
             $store = app(AsyncStore::class);

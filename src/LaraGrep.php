@@ -81,6 +81,72 @@ class LaraGrep
     }
 
     /**
+     * Analyze the question against clarification rules before running the agent loop.
+     *
+     * Returns null if the question is clear enough (proceed), or an array with
+     * clarification questions if the AI determines the question is too vague.
+     *
+     * @return array{action: string, questions: string[], original_question: string}|null
+     */
+    public function clarifyQuestion(
+        string $question,
+        ?string $scope = null,
+    ): ?array {
+        $scopeConfig = $this->resolveScopeConfig($scope);
+
+        if (empty($this->config['clarification']['enabled'])) {
+            return null;
+        }
+
+        $rules = $scopeConfig['clarification_rules'] ?? [];
+
+        if (!is_array($rules) || $rules === []) {
+            return null;
+        }
+
+        $rules = array_values(array_filter(
+            array_map(fn($r) => is_string($r) ? trim($r) : '', $rules),
+            fn($r) => $r !== '',
+        ));
+
+        if ($rules === []) {
+            return null;
+        }
+
+        $this->lastPromptTokens = 0;
+        $this->lastCompletionTokens = 0;
+
+        $resolvedConnection = $this->resolveConnection($scopeConfig['connection'] ?? null);
+        $tables = $this->resolveMetadata($scopeConfig);
+        $tables = $this->fillDefaultConnection($tables, $resolvedConnection);
+
+        $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
+
+        $messages = $this->promptBuilder->buildClarificationMessages(
+            question: $question,
+            tables: $tables,
+            rules: $rules,
+            userLanguage: $userLanguage,
+        );
+
+        $aiResponse = $this->aiClient->chat($messages);
+        $this->lastPromptTokens += $aiResponse->promptTokens;
+        $this->lastCompletionTokens += $aiResponse->completionTokens;
+
+        $parsed = $this->responseParser->parseClarification($aiResponse->content);
+
+        if ($parsed['action'] === 'proceed') {
+            return null;
+        }
+
+        return [
+            'action' => 'clarification',
+            'questions' => $parsed['questions'],
+            'original_question' => $question,
+        ];
+    }
+
+    /**
      * Extract a reusable recipe from an answer for future replay.
      *
      * @param  array  $answer  The full answer from answerQuestion()
