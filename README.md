@@ -601,7 +601,26 @@ User question → AI checks against rules → Missing context?
 }
 ```
 
-The frontend can display these questions, collect the answers, and resubmit with a more specific question (e.g., "Show me the sales for Store A in January 2026").
+The frontend can display these questions, collect the answers, and resubmit with `clarification_answers`. LaraGrep will call the AI to reformulate the original question into a precise, self-contained question and then run the agent loop with it automatically.
+
+**Answering clarification questions:**
+
+```bash
+curl -X POST http://localhost/laragrep \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Show me the sales",
+    "conversation_id": "uuid-from-clarification-response",
+    "clarification_answers": [
+      {"question": "What date range?", "answer": "January 2026"},
+      {"question": "Which store?", "answer": "Store Centro"}
+    ]
+  }'
+```
+
+The AI reformulates the vague question into something like "Show me the sales for Store Centro in January 2026" and proceeds with the agent loop. The reformulated question is what gets stored in conversation history and recipes.
+
+If reformulation fails for any reason, the original question is used as fallback — the agent loop still runs.
 
 **Programmatic usage:**
 
@@ -611,8 +630,17 @@ $laraGrep = app(LaraGrep::class);
 $clarification = $laraGrep->clarifyQuestion('Show me the sales', 'default');
 
 if ($clarification !== null) {
-    // Ask the user for more context
-    // $clarification['questions'] contains the clarification questions
+    // Collect answers from the user, then reformulate
+    $reformulated = $laraGrep->reformulateQuestion(
+        'Show me the sales',
+        [
+            ['question' => 'What date range?', 'answer' => 'January 2026'],
+            ['question' => 'Which store?', 'answer' => 'Store Centro'],
+        ],
+        'default',
+    );
+
+    $answer = $laraGrep->answerQuestion($reformulated);
 } else {
     // Question is clear — proceed normally
     $answer = $laraGrep->answerQuestion('Show me the sales');
@@ -626,10 +654,11 @@ The clarification call is lightweight — it sends only table names and descript
 | Call | Input (typical) | Output (typical) |
 |---|---|---|
 | Clarification | ~200-400 tokens | ~15-40 tokens |
+| Reformulation | ~150-300 tokens | ~15-30 tokens |
 | Smart Schema Filter | ~150-300 tokens | ~15-30 tokens |
 | Agent Loop (per iteration) | ~500-2000+ tokens | ~100-300 tokens |
 
-When the question is clear ("proceed"), the overhead is a single lightweight API call (~200-400 input tokens). When clarification is triggered, it **saves** the entire agent loop cost (potentially 3-10 iterations) by catching vague questions early.
+When the question is clear ("proceed"), the overhead is a single lightweight API call (~200-400 input tokens). When clarification is triggered, it **saves** the entire agent loop cost (potentially 3-10 iterations) by catching vague questions early. The reformulation call is equally lightweight — it only sends the original question and Q&A pairs (no schema), producing a plain text question.
 
 With the feature disabled or no `clarification_rules` defined, zero API calls are made — `clarifyQuestion()` returns `null` immediately.
 

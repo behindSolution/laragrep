@@ -28,6 +28,9 @@ class QueryController extends Controller
             'question' => ['required', 'string'],
             'debug' => ['sometimes', 'boolean'],
             'conversation_id' => ['sometimes', 'nullable', 'string'],
+            'clarification_answers' => ['sometimes', 'nullable', 'array'],
+            'clarification_answers.*.question' => ['required_with:clarification_answers', 'string'],
+            'clarification_answers.*.answer' => ['required_with:clarification_answers', 'string'],
         ]);
 
         $question = $validated['question'];
@@ -57,7 +60,30 @@ class QueryController extends Controller
         $userIdResolver = config('laragrep.user_id_resolver');
         $userId = is_callable($userIdResolver) ? $userIdResolver() : auth()->id();
 
-        if (config('laragrep.clarification.enabled', false)) {
+        $clarificationAnswers = $validated['clarification_answers'] ?? null;
+
+        if (is_array($clarificationAnswers)) {
+            $clarificationAnswers = array_values(array_filter(
+                $clarificationAnswers,
+                fn(array $pair) => trim($pair['question'] ?? '') !== '' && trim($pair['answer'] ?? '') !== '',
+            ));
+
+            if ($clarificationAnswers === []) {
+                $clarificationAnswers = null;
+            }
+        }
+
+        if ($clarificationAnswers !== null) {
+            try {
+                $question = ($this->recorder !== null)
+                    ? $this->recorder->reformulateQuestion($question, $clarificationAnswers, $scope, $userId)
+                    : $this->service->reformulateQuestion($question, $clarificationAnswers, $scope);
+            } catch (Throwable) {
+                // Reformulation failure: fall back to original question
+            }
+        }
+
+        if (config('laragrep.clarification.enabled', false) && $clarificationAnswers === null) {
             try {
                 $clarification = ($this->recorder !== null)
                     ? $this->recorder->clarifyQuestion($question, $scope, $userId)

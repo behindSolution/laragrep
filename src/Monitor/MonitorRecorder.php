@@ -101,6 +101,15 @@ class MonitorRecorder
         return $result;
     }
 
+    public function reformulateQuestion(
+        string $question,
+        array $answers,
+        ?string $scope = null,
+        string|int|null $userId = null,
+    ): string {
+        return $this->laraGrep->reformulateQuestion($question, $answers, $scope);
+    }
+
     public function formatResult(
         array $answer,
         string $format,

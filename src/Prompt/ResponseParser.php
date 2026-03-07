@@ -142,6 +142,31 @@ class ResponseParser
     }
 
     /**
+     * Parse the AI response from a question reformulation call.
+     *
+     * @return string The reformulated question.
+     *
+     * @throws RuntimeException
+     */
+    public function parseReformulation(string $content): string
+    {
+        $content = trim($content);
+        $content = preg_replace('/^```(?:\w+)?\s*/im', '', $content);
+        $content = preg_replace('/\s*```\s*$/m', '', $content);
+        $content = trim($content);
+
+        if (preg_match('/^["\'](.+)["\']$/s', $content, $matches)) {
+            $content = trim($matches[1]);
+        }
+
+        if ($content === '') {
+            throw new RuntimeException('Reformulation response was empty.');
+        }
+
+        return $content;
+    }
+
+    /**
      * Parse the AI response from a clarification analysis call.
      *
      * @return array{action: 'clarification'|'proceed', questions?: string[]}

@@ -316,4 +316,50 @@ class ResponseParserTest extends TestCase
             'questions' => ['', '  '],
         ]));
     }
+
+    // ── parseReformulation ──────────────────────────────────────
+
+    public function test_parse_reformulation_returns_trimmed_text(): void
+    {
+        $result = $this->parser->parseReformulation('  Mostra as vendas de Janeiro  ');
+
+        $this->assertSame('Mostra as vendas de Janeiro', $result);
+    }
+
+    public function test_parse_reformulation_strips_markdown_fences(): void
+    {
+        $result = $this->parser->parseReformulation("```\nReformulated question\n```");
+
+        $this->assertSame('Reformulated question', $result);
+    }
+
+    public function test_parse_reformulation_strips_surrounding_double_quotes(): void
+    {
+        $result = $this->parser->parseReformulation('"Mostra as vendas da Loja Centro"');
+
+        $this->assertSame('Mostra as vendas da Loja Centro', $result);
+    }
+
+    public function test_parse_reformulation_strips_surrounding_single_quotes(): void
+    {
+        $result = $this->parser->parseReformulation("'Mostra as vendas da Loja Centro'");
+
+        $this->assertSame('Mostra as vendas da Loja Centro', $result);
+    }
+
+    public function test_parse_reformulation_empty_throws(): void
+    {
+        $this->expectException(RuntimeException::class);
+
+        $this->parser->parseReformulation('   ');
+    }
+
+    public function test_parse_reformulation_preserves_content(): void
+    {
+        $question = 'Show me the sales for Store Centro in January 2026, grouped by product category';
+
+        $result = $this->parser->parseReformulation($question);
+
+        $this->assertSame($question, $result);
+    }
 }

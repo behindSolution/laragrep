@@ -428,6 +428,46 @@ class PromptBuilder
         ];
     }
 
+    /**
+     * Build messages for reformulating a vague question using clarification answers.
+     *
+     * @param  string  $question  The original vague question
+     * @param  array<int, array{question: string, answer: string}>  $answers  Q&A pairs from the user
+     * @param  string  $userLanguage  ISO language code
+     * @return array<int, array{role: string, content: string}>
+     */
+    public function buildReformulationMessages(
+        string $question,
+        array $answers,
+        string $userLanguage = 'en',
+    ): array {
+        $qaPairs = collect($answers)
+            ->map(fn(array $pair, int $i) => sprintf(
+                '%d. Q: %s' . PHP_EOL . '   A: %s',
+                $i + 1,
+                $pair['question'] ?? '',
+                $pair['answer'] ?? '',
+            ))
+            ->implode(PHP_EOL);
+
+        return [
+            [
+                'role' => 'system',
+                'content' => 'You are a question reformulator. You receive a vague question and clarification answers. Your job is to merge them into a single, precise, self-contained question. Respond with ONLY the reformulated question as plain text. Do not add explanations, JSON, or markdown.',
+            ],
+            [
+                'role' => 'user',
+                'content' => implode(PHP_EOL . PHP_EOL, [
+                    'Original question: ' . $question,
+                    'Clarification answers:',
+                    $qaPairs,
+                    'Write the reformulated question in ' . $userLanguage . '.',
+                    'Respond with ONLY the reformulated question. No explanations, no JSON, no markdown.',
+                ]),
+            ],
+        ];
+    }
+
     protected function summarizeStepsForFormat(array $steps): string
     {
         $parts = [];

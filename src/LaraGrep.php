@@ -147,6 +147,41 @@ class LaraGrep
     }
 
     /**
+     * Reformulate a vague question using clarification answers.
+     *
+     * Takes the original question and Q&A pairs from the user,
+     * calls the AI to merge them into a single precise question.
+     *
+     * @param  string  $question  The original vague question
+     * @param  array<int, array{question: string, answer: string}>  $answers  Clarification Q&A pairs
+     * @param  string|null  $scope  Scope for language resolution
+     * @return string  The reformulated question
+     */
+    public function reformulateQuestion(
+        string $question,
+        array $answers,
+        ?string $scope = null,
+    ): string {
+        $this->lastPromptTokens = 0;
+        $this->lastCompletionTokens = 0;
+
+        $scopeConfig = $this->resolveScopeConfig($scope);
+        $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
+
+        $messages = $this->promptBuilder->buildReformulationMessages(
+            question: $question,
+            answers: $answers,
+            userLanguage: $userLanguage,
+        );
+
+        $aiResponse = $this->aiClient->chat($messages);
+        $this->lastPromptTokens += $aiResponse->promptTokens;
+        $this->lastCompletionTokens += $aiResponse->completionTokens;
+
+        return $this->responseParser->parseReformulation($aiResponse->content);
+    }
+
+    /**
      * Extract a reusable recipe from an answer for future replay.
      *
      * @param  array  $answer  The full answer from answerQuestion()
