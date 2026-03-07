@@ -30,12 +30,16 @@ class ProcessQuestionJob implements ShouldQueue
         public readonly ?string $conversationId,
         public readonly string|int|null $userId,
         public readonly bool $debug,
+        public readonly ?string $userLanguage = null,
     ) {
         $this->timeout = (int) config('laragrep.timeout', 300);
     }
 
     public function handle(): void
     {
+        if ($this->userLanguage !== null) {
+            config()->set('laragrep.user_language', $this->userLanguage);
+        }
         $store = app(AsyncStore::class);
         $service = app(LaraGrep::class);
         $recorder = app(MonitorRecorder::class);

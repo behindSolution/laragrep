@@ -116,6 +116,7 @@ class QueryController extends Controller
 
             ProcessQuestionJob::dispatch(
                 $queryId, $question, $scope, $conversationId, $userId, $debug,
+                config('laragrep.user_language'),
             )->onQueue(config('laragrep.async.queue', 'default'))
              ->onConnection(config('laragrep.async.queue_connection'));
 
