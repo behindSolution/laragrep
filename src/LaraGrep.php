@@ -428,11 +428,29 @@ class LaraGrep
 
     protected function resolveScopeConfig(?string $scope): array
     {
+        $config = $this->getFreshConfig();
         $scopeName = $scope ?? 'default';
-        $contexts = $this->config['contexts'] ?? [];
+        $contexts = $config['contexts'] ?? [];
 
         if (isset($contexts[$scopeName]) && is_array($contexts[$scopeName])) {
-            return array_replace_recursive($this->config, $contexts[$scopeName]);
+            return array_replace_recursive($config, $contexts[$scopeName]);
+        }
+
+        return $config;
+    }
+
+    /**
+     * Get fresh config from the Laravel container, falling back to the
+     * captured config when running outside Laravel (e.g. unit tests).
+     */
+    protected function getFreshConfig(): array
+    {
+        if (function_exists('config')) {
+            $fresh = config('laragrep');
+
+            if (is_array($fresh) && $fresh !== []) {
+                return $fresh;
+            }
         }
 
         return $this->config;
