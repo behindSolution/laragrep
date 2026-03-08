@@ -11,6 +11,10 @@ return new class extends Migration
         $connection = config('laragrep.monitor.connection');
         $table = config('laragrep.monitor.table', 'laragrep_logs');
 
+        if (Schema::connection($connection)->hasTable($table)) {
+            return;
+        }
+
         Schema::connection($connection)->create($table, function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('question', 1000);

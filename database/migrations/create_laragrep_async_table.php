@@ -11,6 +11,10 @@ return new class extends Migration
         $connection = config('laragrep.async.connection');
         $table = config('laragrep.async.table', 'laragrep_async');
 
+        if (Schema::connection($connection)->hasTable($table)) {
+            return;
+        }
+
         Schema::connection($connection)->create($table, function (Blueprint $table) {
             $table->string('id', 36)->primary();
             $table->string('user_id')->nullable();

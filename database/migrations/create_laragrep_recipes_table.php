@@ -11,6 +11,10 @@ return new class extends Migration
         $connection = config('laragrep.recipes.connection');
         $table = config('laragrep.recipes.table', 'laragrep_recipes');
 
+        if (Schema::connection($connection)->hasTable($table)) {
+            return;
+        }
+
         Schema::connection($connection)->create($table, function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('conversation_id', 255)->nullable();
