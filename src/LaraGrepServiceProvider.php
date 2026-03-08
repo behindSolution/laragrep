@@ -257,6 +257,12 @@ class LaraGrepServiceProvider extends ServiceProvider
         if (config('laragrep.async.enabled', false)) {
             $this->validateAsyncQueueDriver();
         }
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                \LaraGrep\Console\MonitorDiagnosticCommand::class,
+            ]);
+        }
     }
 
     private function ensureSqliteDatabases(): void
