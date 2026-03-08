@@ -298,7 +298,7 @@ return [
         'table' => env('LARAGREP_ASYNC_TABLE', 'laragrep_async'),
         'retention_hours' => (int) env('LARAGREP_ASYNC_RETENTION_HOURS', 24),
         'queue' => env('LARAGREP_ASYNC_QUEUE', 'default'),
-        'queue_connection' => env('LARAGREP_ASYNC_QUEUE_CONNECTION'),
+        'queue_connection' => env('LARAGREP_ASYNC_QUEUE_CONNECTION', 'database'),
         'channel_prefix' => env('LARAGREP_ASYNC_CHANNEL_PREFIX', 'laragrep'),
         'private' => (bool) env('LARAGREP_ASYNC_PRIVATE', false),
     ],
