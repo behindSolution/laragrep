@@ -4,7 +4,7 @@ namespace LaraGrep\Prompt;
 
 class PromptBuilder
 {
-    public function buildUserPrompt(string $question, bool $hasMultipleConnections = false): string
+    public function buildUserPrompt(string $question, bool $hasMultipleConnections = false, string $responseFormat = 'html'): string
     {
         $queryExample = $hasMultipleConnections
             ? '{"query": "SELECT ...", "bindings": [], "reason": "Why this query is needed", "connection": "connection_name"}'
@@ -32,7 +32,11 @@ class PromptBuilder
             . PHP_EOL . '- After receiving query results, analyze them and decide: run more queries if needed, or provide the final answer.'
             . PHP_EOL . '- Do not mention SQL, queries, bindings, or technical terms in the final summary. Give a clear, business-oriented answer.'
             . PHP_EOL . '- A LIMIT clause is automatically applied to queries without one. If you need more rows, add an explicit LIMIT. For counting, always use COUNT(*) instead of fetching all rows.'
-            . PHP_EOL . '- You can use these HTML tags in the summary: table, b, ul, ol, i, td, tr, th, thead, tbody. Do not use markdown.'
+            . PHP_EOL . match ($responseFormat) {
+                'markdown' => '- Format the summary using Markdown (headers, bold, tables, lists). Do not use HTML tags.',
+                'text' => '- Write the summary as plain text only. Do not use HTML tags, Markdown, or any formatting syntax.',
+                default => '- You can use these HTML tags in the summary: table, b, ul, ol, i, td, tr, th, thead, tbody. Do not use markdown.',
+            }
             . $connectionRules,
             'Question: ' . $question,
         ]);
@@ -143,6 +147,7 @@ class PromptBuilder
         ?array $database = null,
         ?string $customSystemPrompt = null,
         array $conversationHistory = [],
+        string $responseFormat = 'html',
     ): array {
         $messages = [];
 
@@ -173,7 +178,7 @@ class PromptBuilder
             $messages[] = ['role' => $role, 'content' => $content];
         }
 
-        $messages[] = ['role' => 'user', 'content' => $this->buildUserPrompt($question, $this->hasMultipleConnections($tables))];
+        $messages[] = ['role' => 'user', 'content' => $this->buildUserPrompt($question, $this->hasMultipleConnections($tables), $responseFormat)];
 
         return $messages;
     }
@@ -191,6 +196,7 @@ class PromptBuilder
         string $userLanguage = 'en',
         ?array $database = null,
         ?string $customSystemPrompt = null,
+        string $responseFormat = 'html',
     ): array {
         $messages = [];
 
@@ -220,7 +226,7 @@ class PromptBuilder
             ->implode(PHP_EOL . PHP_EOL);
 
         $userContent = implode(PHP_EOL . PHP_EOL, [
-            $this->buildUserPrompt($question, $this->hasMultipleConnections($tables)),
+            $this->buildUserPrompt($question, $this->hasMultipleConnections($tables), $responseFormat),
             'This question was previously answered using these queries:',
             $recipeContext,
             sprintf(

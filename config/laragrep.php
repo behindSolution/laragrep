@@ -163,6 +163,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Response Format
+    |--------------------------------------------------------------------------
+    |
+    | Controls the formatting of the AI's final answer (summary).
+    |
+    | "html"     - Uses HTML tags: table, b, ul, ol, i, td, tr, th, etc. (default)
+    | "markdown" - Uses Markdown formatting.
+    | "text"     - Plain text only, no formatting tags.
+    |
+    */
+
+    'response_format' => env('LARAGREP_RESPONSE_FORMAT', 'html'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Conversation Persistence
     |--------------------------------------------------------------------------
     |

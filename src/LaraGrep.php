@@ -43,6 +43,7 @@ class LaraGrep
 
         $scopeConfig = $this->resolveScopeConfig($scope);
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
+        $responseFormat = $scopeConfig['response_format'] ?? $this->config['response_format'] ?? 'html';
         $maxIterations = (int) ($this->config['max_iterations'] ?? 10);
 
         $resolvedConnection = $this->resolveConnection($scopeConfig['connection'] ?? null);
@@ -69,6 +70,7 @@ class LaraGrep
             database: $scopeConfig['database'] ?? null,
             customSystemPrompt: $this->config['system_prompt'] ?? null,
             conversationHistory: $history,
+            responseFormat: $responseFormat,
         );
 
         $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep);
@@ -230,6 +232,7 @@ class LaraGrep
 
         $scopeConfig = $this->resolveScopeConfig($scope);
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
+        $responseFormat = $scopeConfig['response_format'] ?? $this->config['response_format'] ?? 'html';
         $maxIterations = (int) ($this->config['max_iterations'] ?? 10);
 
         $resolvedConnection = $this->resolveConnection($scopeConfig['connection'] ?? null);
@@ -249,6 +252,7 @@ class LaraGrep
             userLanguage: $userLanguage,
             database: $scopeConfig['database'] ?? null,
             customSystemPrompt: $this->config['system_prompt'] ?? null,
+            responseFormat: $responseFormat,
         );
 
         return $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep);

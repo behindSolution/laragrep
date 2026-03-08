@@ -938,6 +938,7 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_CLARIFICATION_ENABLED` | `false` | Enable pre-query question clarification |
 | `LARAGREP_SCHEMA_MODE` | `manual` | Schema loading mode |
 | `LARAGREP_USER_LANGUAGE` | `en` | AI response language |
+| `LARAGREP_RESPONSE_FORMAT` | `html` | Summary format: `html`, `markdown`, or `text` |
 | `LARAGREP_CONNECTION` | — | Database connection name |
 | `LARAGREP_DATABASE_TYPE` | — | DB type hint for AI |
 | `LARAGREP_DATABASE_NAME` | `DB_DATABASE` | DB name hint for AI |
