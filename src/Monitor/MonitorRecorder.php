@@ -92,8 +92,8 @@ class MonitorRecorder
                         'tables_filtered' => null,
                         'debug_queries' => '[]',
                     ]);
-                } catch (Throwable) {
-                    // Monitoring must never break the actual operation
+                } catch (Throwable $e) {
+                    report($e);
                 }
             }
         }
@@ -172,8 +172,8 @@ class MonitorRecorder
                     'tables_filtered' => $schemaStats['filtered'] ?? null,
                     'debug_queries' => json_encode($answer['debug']['queries'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 ]);
-            } catch (Throwable) {
-                // Monitoring must never break the actual operation
+            } catch (Throwable $e) {
+                report($e);
             }
         }
 
