@@ -283,6 +283,10 @@ class LaraGrepServiceProvider extends ServiceProvider
                 continue;
             }
 
+            if (!str_starts_with($path, DIRECTORY_SEPARATOR)) {
+                continue;
+            }
+
             if (isset($checked[$path])) {
                 continue;
             }
@@ -292,7 +296,7 @@ class LaraGrepServiceProvider extends ServiceProvider
             if (!file_exists($path)) {
                 $dir = dirname($path);
 
-                if (is_dir($dir)) {
+                if (is_dir($dir) && is_writable($dir)) {
                     file_put_contents($path, '');
                 }
             }
