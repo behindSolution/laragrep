@@ -232,6 +232,8 @@ class LaraGrepServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->ensureSqliteDatabases();
+
         $this->publishes([
             __DIR__ . '/../config/laragrep.php' => config_path('laragrep.php'),
         ], 'laragrep-config');
@@ -254,6 +256,46 @@ class LaraGrepServiceProvider extends ServiceProvider
 
         if (config('laragrep.async.enabled', false)) {
             $this->validateAsyncQueueDriver();
+        }
+    }
+
+    private function ensureSqliteDatabases(): void
+    {
+        $connectionNames = array_filter([
+            config('laragrep.conversation.connection'),
+            config('laragrep.monitor.connection'),
+            config('laragrep.recipes.connection'),
+            config('laragrep.async.connection'),
+        ], fn($name) => is_string($name) && $name !== '');
+
+        $checked = [];
+
+        foreach (array_unique($connectionNames) as $name) {
+            $driver = config("database.connections.{$name}.driver");
+
+            if ($driver !== 'sqlite') {
+                continue;
+            }
+
+            $path = config("database.connections.{$name}.database");
+
+            if (!is_string($path) || $path === '' || $path === ':memory:') {
+                continue;
+            }
+
+            if (isset($checked[$path])) {
+                continue;
+            }
+
+            $checked[$path] = true;
+
+            if (!file_exists($path)) {
+                $dir = dirname($path);
+
+                if (is_dir($dir)) {
+                    file_put_contents($path, '');
+                }
+            }
         }
     }
 
