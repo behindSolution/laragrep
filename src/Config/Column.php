@@ -230,6 +230,17 @@ class Column
         return $this;
     }
 
+    public static function __set_state(array $state): static
+    {
+        $column = new static($state['name'], $state['type']);
+        $column->description = $state['description'] ?? '';
+        $column->isUnsigned = $state['isUnsigned'] ?? false;
+        $column->isNullable = $state['isNullable'] ?? false;
+        $column->template = $state['template'] ?? null;
+
+        return $column;
+    }
+
     public function toArray(): array
     {
         $type = $this->type;

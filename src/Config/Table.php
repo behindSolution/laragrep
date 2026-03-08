@@ -50,6 +50,18 @@ class Table
         return $this;
     }
 
+    public static function __set_state(array $state): static
+    {
+        $table = new static($state['name']);
+        $table->description = $state['description'] ?? '';
+        $table->connection = $state['connection'] ?? null;
+        $table->engine = $state['engine'] ?? null;
+        $table->columns = $state['columns'] ?? [];
+        $table->relationships = $state['relationships'] ?? [];
+
+        return $table;
+    }
+
     public function toArray(): array
     {
         $result = [

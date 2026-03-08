@@ -39,6 +39,15 @@ class Relationship
         );
     }
 
+    public static function __set_state(array $state): static
+    {
+        return new static(
+            $state['type'],
+            $state['table'],
+            $state['foreignKey'] ?? null,
+        );
+    }
+
     public function toArray(): array
     {
         $result = [
