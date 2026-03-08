@@ -149,6 +149,11 @@ class MonitorRecorder
             $tokenUsage = $this->laraGrep->getLastTokenUsage();
             $steps = $answer['steps'] ?? [];
 
+            \Log::debug('[LaraGrep Monitor] About to record', [
+                'store_class' => get_class($this->store),
+                'question' => mb_substr($question, 0, 50),
+            ]);
+
             try {
                 $this->store->record([
                     'question' => mb_substr(($type === 'replay' ? '[Replay] ' : '') . $question, 0, 1000),
@@ -172,7 +177,12 @@ class MonitorRecorder
                     'tables_filtered' => $schemaStats['filtered'] ?? null,
                     'debug_queries' => json_encode($answer['debug']['queries'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 ]);
+                \Log::debug('[LaraGrep Monitor] Record saved OK');
             } catch (Throwable $e) {
+                \Log::error('[LaraGrep Monitor] Record FAILED', [
+                    'error' => $e->getMessage(),
+                    'class' => get_class($e),
+                ]);
                 report($e);
             }
         }

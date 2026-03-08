@@ -128,6 +128,8 @@ class QueryController extends Controller
             ], 202);
         }
 
+        \Log::debug('[LaraGrep Controller] recorder is ' . ($this->recorder !== null ? 'SET (' . get_class($this->recorder) . ')' : 'NULL'));
+
         try {
             if ($this->recorder !== null) {
                 $answer = $this->recorder->answerQuestion(
