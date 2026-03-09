@@ -9,13 +9,15 @@ class QueryValidator
     /**
      * @param  string  $query
      * @param  array<int, string>  $knownTables  Lowercased known table names.
+     * @param  int  $maxRows  Maximum allowed LIMIT value (0 = no limit).
      *
      * @throws RuntimeException
      */
-    public function validate(string $query, array $knownTables): void
+    public function validate(string $query, array $knownTables, int $maxRows = 0): void
     {
         $this->assertSelectOnly($query);
         $this->assertTablesExist($query, $knownTables);
+        $this->assertLimitWithinBounds($query, $maxRows);
     }
 
     protected function assertSelectOnly(string $query): void
@@ -24,6 +26,27 @@ class QueryValidator
 
         if (!str_starts_with($normalized, 'select') && !str_starts_with($normalized, 'with')) {
             throw new RuntimeException('Only SELECT queries are allowed.');
+        }
+    }
+
+    protected function assertLimitWithinBounds(string $query, int $maxRows): void
+    {
+        if ($maxRows <= 0) {
+            return;
+        }
+
+        $cleaned = $this->stripNonCode($query);
+
+        if (preg_match('/\bLIMIT\s+(\d+)/i', $cleaned, $matches)) {
+            $limit = (int) $matches[1];
+
+            if ($limit > $maxRows) {
+                throw new RuntimeException(sprintf(
+                    'LIMIT %d exceeds the maximum allowed value of %d.',
+                    $limit,
+                    $maxRows
+                ));
+            }
         }
     }
 

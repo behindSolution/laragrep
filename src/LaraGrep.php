@@ -63,6 +63,8 @@ class LaraGrep
             $history = $this->conversationStore->getMessages($conversationId);
         }
 
+        $maxRows = (int) ($this->config['max_rows'] ?? 20);
+
         $messages = $this->promptBuilder->buildQueryMessages(
             question: $question,
             tables: $tables,
@@ -71,9 +73,10 @@ class LaraGrep
             customSystemPrompt: $this->config['system_prompt'] ?? null,
             conversationHistory: $history,
             responseFormat: $responseFormat,
+            maxRows: $maxRows,
         );
 
-        $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep);
+        $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep, $maxRows);
 
         if ($conversationId !== null && $this->conversationStore !== null) {
             $this->conversationStore->appendExchange($conversationId, $question, $result['summary']);
@@ -245,6 +248,8 @@ class LaraGrep
 
         $knownTables = $this->extractKnownTables($tables);
 
+        $maxRows = (int) ($this->config['max_rows'] ?? 20);
+
         $messages = $this->promptBuilder->buildReplayMessages(
             question: $question,
             tables: $tables,
@@ -253,9 +258,10 @@ class LaraGrep
             database: $scopeConfig['database'] ?? null,
             customSystemPrompt: $this->config['system_prompt'] ?? null,
             responseFormat: $responseFormat,
+            maxRows: $maxRows,
         );
 
-        return $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep);
+        return $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep, $maxRows);
     }
 
     /**
@@ -304,6 +310,7 @@ class LaraGrep
         int $maxIterations,
         string $userLanguage,
         ?Closure $onStep = null,
+        int $maxRows = 0,
     ): array {
         $executedSteps = [];
         $debugQueries = [];
@@ -333,7 +340,7 @@ class LaraGrep
                 $entryConnection = $entry['connection'] ?? null;
 
                 try {
-                    $this->queryValidator->validate($entry['query'], $knownTables);
+                    $this->queryValidator->validate($entry['query'], $knownTables, $maxRows);
                     $execution = $this->queryExecutor->execute($entry['query'], $entry['bindings'], $entryConnection);
                 } catch (\Throwable $e) {
                     $errorMsg = $e->getMessage();
