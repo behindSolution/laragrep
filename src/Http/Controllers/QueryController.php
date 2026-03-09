@@ -86,8 +86,8 @@ class QueryController extends Controller
         if (config('laragrep.clarification.enabled', false) && $clarificationAnswers === null) {
             try {
                 $clarification = ($this->recorder !== null)
-                    ? $this->recorder->clarifyQuestion($question, $scope, $userId)
-                    : $this->service->clarifyQuestion($question, $scope);
+                    ? $this->recorder->clarifyQuestion($question, $scope, $userId, $conversationId)
+                    : $this->service->clarifyQuestion($question, $scope, $conversationId);
 
                 if ($clarification !== null) {
                     $response = $clarification;

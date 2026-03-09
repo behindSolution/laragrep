@@ -55,12 +55,13 @@ class MonitorRecorder
         string $question,
         ?string $scope = null,
         string|int|null $userId = null,
+        ?string $conversationId = null,
     ): ?array {
         $startTime = microtime(true);
         $result = null;
 
         try {
-            $result = $this->laraGrep->clarifyQuestion($question, $scope);
+            $result = $this->laraGrep->clarifyQuestion($question, $scope, $conversationId);
         } catch (Throwable) {
             // Clarification must never break the actual operation
             return null;

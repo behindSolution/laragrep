@@ -399,6 +399,7 @@ class PromptBuilder
         array $tables,
         array $rules,
         string $userLanguage = 'en',
+        array $conversationHistory = [],
     ): array {
         $tableList = collect($tables)
             ->map(function (array $table) {
@@ -415,27 +416,71 @@ class PromptBuilder
             ->map(fn(string $rule, int $i) => sprintf('%d. %s', $i + 1, $rule))
             ->implode(PHP_EOL);
 
+        $historyContext = $this->formatConversationHistory($conversationHistory);
+
+        $userParts = array_filter([
+            'Clarification rules:',
+            $rulesList,
+            'Available tables:',
+            $tableList,
+            $historyContext,
+            'User language: ' . $userLanguage,
+            'Question: ' . $question,
+            'Analyze the question against the rules above. Respond with ONLY a JSON object:',
+            '- If the question needs clarification: {"action": "clarification", "questions": ["question1", "question2"]}',
+            '- If the question is clear enough: {"action": "proceed"}',
+            'Write the clarification questions in the user\'s language (' . $userLanguage . ').',
+        ]);
+
         return [
             [
                 'role' => 'system',
-                'content' => 'You are a question analyzer. Your job is to check if the user\'s question has enough context to be answered accurately, based on the provided rules. If important information is missing according to the rules, ask clarification questions. If the question is clear enough, proceed.',
+                'content' => 'You are a question analyzer. Your job is to check if the user\'s question has enough context to be answered accurately, based on the provided rules. If important information is missing according to the rules, ask clarification questions. If the question is clear enough, proceed.'
+                    . ' When conversation history is provided, consider it as context — the current question may reference or continue a previous exchange.',
             ],
             [
                 'role' => 'user',
-                'content' => implode(PHP_EOL . PHP_EOL, [
-                    'Clarification rules:',
-                    $rulesList,
-                    'Available tables:',
-                    $tableList,
-                    'User language: ' . $userLanguage,
-                    'Question: ' . $question,
-                    'Analyze the question against the rules above. Respond with ONLY a JSON object:',
-                    '- If the question needs clarification: {"action": "clarification", "questions": ["question1", "question2"]}',
-                    '- If the question is clear enough: {"action": "proceed"}',
-                    'Write the clarification questions in the user\'s language (' . $userLanguage . ').',
-                ]),
+                'content' => implode(PHP_EOL . PHP_EOL, $userParts),
             ],
         ];
+    }
+
+    protected function formatConversationHistory(array $conversationHistory): ?string
+    {
+        if ($conversationHistory === []) {
+            return null;
+        }
+
+        $lines = [];
+
+        foreach ($conversationHistory as $message) {
+            if (!is_array($message)) {
+                continue;
+            }
+
+            $role = $message['role'] ?? null;
+            $content = $message['content'] ?? null;
+
+            if (!is_string($role) || !is_string($content)) {
+                continue;
+            }
+
+            $role = trim(strtolower($role));
+            $content = trim($content);
+
+            if ($content === '' || !in_array($role, ['user', 'assistant'], true)) {
+                continue;
+            }
+
+            $label = $role === 'user' ? 'User' : 'Assistant';
+            $lines[] = sprintf('%s: %s', $label, $content);
+        }
+
+        if ($lines === []) {
+            return null;
+        }
+
+        return "Conversation history:\n" . implode(PHP_EOL, $lines);
     }
 
     /**

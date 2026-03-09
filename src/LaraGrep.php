@@ -96,11 +96,19 @@ class LaraGrep
     public function clarifyQuestion(
         string $question,
         ?string $scope = null,
+        ?string $conversationId = null,
     ): ?array {
         $scopeConfig = $this->resolveScopeConfig($scope);
 
         if (empty($this->config['clarification']['enabled'])) {
             return null;
+        }
+
+        $conversationId = $this->normalizeId($conversationId);
+        $conversationHistory = [];
+
+        if ($conversationId !== null && $this->conversationStore !== null) {
+            $conversationHistory = $this->conversationStore->getMessages($conversationId);
         }
 
         $rules = $scopeConfig['clarification_rules'] ?? [];
@@ -132,6 +140,7 @@ class LaraGrep
             tables: $tables,
             rules: $rules,
             userLanguage: $userLanguage,
+            conversationHistory: $conversationHistory,
         );
 
         $aiResponse = $this->aiClient->chat($messages);
