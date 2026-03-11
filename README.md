@@ -537,7 +537,7 @@ LARAGREP_MAX_ROWS=20
 LARAGREP_MAX_QUERY_TIME=3
 ```
 
-- **max_rows** — Automatically injects `LIMIT` into queries that don't have one. Default: `20`. Set to `0` to disable.
+- **max_rows** — Automatically injects `LIMIT` into queries that don't have one, and rejects explicit `LIMIT` values that exceed this cap. The AI is informed of the limit in its prompt. Default: `20`. Set to `0` to disable.
 - **max_query_time** — Maximum execution time per query in seconds. Kills slow queries before they block the database. Default: `3`. Supports MySQL, MariaDB, PostgreSQL, and SQLite.
 
 ### Agent Loop
@@ -627,7 +627,8 @@ If reformulation fails for any reason, the original question is used as fallback
 ```php
 $laraGrep = app(LaraGrep::class);
 
-$clarification = $laraGrep->clarifyQuestion('Show me the sales', 'default');
+// Pass conversationId so the AI considers conversation history
+$clarification = $laraGrep->clarifyQuestion('Show me the sales', 'default', $conversationId);
 
 if ($clarification !== null) {
     // Collect answers from the user, then reformulate
@@ -659,6 +660,29 @@ The clarification call is lightweight — it sends only table names and descript
 | Agent Loop (per iteration) | ~500-2000+ tokens | ~100-300 tokens |
 
 When the question is clear ("proceed"), the overhead is a single lightweight API call (~200-400 input tokens). When clarification is triggered, it **saves** the entire agent loop cost (potentially 3-10 iterations) by catching vague questions early. The reformulation call is equally lightweight — it only sends the original question and Q&A pairs (no schema), producing a plain text question.
+
+**Conversation-aware clarification:**
+
+When a `conversation_id` is provided, the clarification step receives the conversation history. This prevents false positives — for example, "Please continue" in an ongoing conversation won't trigger clarification because the AI sees the full context.
+
+**Page suggestions:**
+
+If your application has existing dashboards or reports that overlap with common questions, you can list them as suggestions. When the user's question matches a suggestion, the AI includes it as a natural clarification question — e.g., *"Would you like me to query the data now, or would you prefer to check the existing Incidents Dashboard (/dashboard/incidents)?"*
+
+```php
+'contexts' => [
+    'default' => [
+        'suggestions' => [
+            ['label' => 'Incidents Dashboard', 'description' => 'Shows incidents per company with period filters', 'url' => '/dashboard/incidents'],
+            ['label' => 'Monthly Sales Report', 'description' => 'Pre-built report with sales by region and product', 'url' => '/reports/sales'],
+        ],
+        'clarification_rules' => [...],
+        'tables' => [...],
+    ],
+],
+```
+
+Each suggestion needs a `label` (what the user sees), a `description` (what the AI uses to decide relevance), and a `url`. The AI only suggests pages when relevant — if the question doesn't overlap, no suggestion is made. This doesn't change the response contract: suggestions come as regular clarification questions, so no frontend changes are needed.
 
 With the feature disabled or no `clarification_rules` defined, zero API calls are made — `clarifyQuestion()` returns `null` immediately.
 

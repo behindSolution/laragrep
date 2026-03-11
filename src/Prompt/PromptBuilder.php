@@ -400,6 +400,7 @@ class PromptBuilder
         array $rules,
         string $userLanguage = 'en',
         array $conversationHistory = [],
+        array $suggestions = [],
     ): array {
         $tableList = collect($tables)
             ->map(function (array $table) {
@@ -417,6 +418,7 @@ class PromptBuilder
             ->implode(PHP_EOL);
 
         $historyContext = $this->formatConversationHistory($conversationHistory);
+        $suggestionsContext = $this->formatSuggestions($suggestions);
 
         $userParts = array_filter([
             'Clarification rules:',
@@ -424,6 +426,7 @@ class PromptBuilder
             'Available tables:',
             $tableList,
             $historyContext,
+            $suggestionsContext,
             'User language: ' . $userLanguage,
             'Question: ' . $question,
             'Analyze the question against the rules above. Respond with ONLY a JSON object:',
@@ -432,11 +435,17 @@ class PromptBuilder
             'Write the clarification questions in the user\'s language (' . $userLanguage . ').',
         ]);
 
+        $systemContent = 'You are a question analyzer. Your job is to check if the user\'s question has enough context to be answered accurately, based on the provided rules. If important information is missing according to the rules, ask clarification questions. If the question is clear enough, proceed.'
+            . ' When conversation history is provided, consider it as context — the current question may reference or continue a previous exchange.';
+
+        if ($suggestions !== []) {
+            $systemContent .= ' When the user\'s question overlaps with an existing page/dashboard listed in "Available pages", include a clarification question offering the existing page as an alternative (e.g., "Would you like me to query the data now, or would you prefer to check the existing page: [label] (url)?"). This should be a natural question, not a redirect.';
+        }
+
         return [
             [
                 'role' => 'system',
-                'content' => 'You are a question analyzer. Your job is to check if the user\'s question has enough context to be answered accurately, based on the provided rules. If important information is missing according to the rules, ask clarification questions. If the question is clear enough, proceed.'
-                    . ' When conversation history is provided, consider it as context — the current question may reference or continue a previous exchange.',
+                'content' => $systemContent,
             ],
             [
                 'role' => 'user',
@@ -481,6 +490,28 @@ class PromptBuilder
         }
 
         return "Conversation history:\n" . implode(PHP_EOL, $lines);
+    }
+
+    /**
+     * @param  array<int, array{label: string, description: string, url: string}>  $suggestions
+     */
+    protected function formatSuggestions(array $suggestions): ?string
+    {
+        if ($suggestions === []) {
+            return null;
+        }
+
+        $lines = array_map(
+            fn(array $s) => sprintf(
+                '- %s (%s)%s',
+                $s['label'],
+                $s['url'],
+                $s['description'] !== '' ? ': ' . $s['description'] : ''
+            ),
+            $suggestions,
+        );
+
+        return "Available pages:\n" . implode(PHP_EOL, $lines);
     }
 
     /**

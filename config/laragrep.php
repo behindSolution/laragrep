@@ -220,6 +220,15 @@ return [
                 // 'Always ask for a date range when the question involves time-based data',
                 // 'Always ask which store/branch if not specified',
             ],
+            'suggestions' => [
+                // Links to existing dashboards or reports. When a user's question
+                // overlaps with a suggestion, the AI will offer it as an alternative
+                // during clarification (e.g., "Would you like me to query now, or
+                // would you prefer to use the existing dashboard?").
+                //
+                // ['label' => 'Incidents Dashboard', 'description' => 'Shows incidents per company with period filters', 'url' => '/dashboard/incidents'],
+                // ['label' => 'Monthly Sales Report', 'description' => 'Pre-built report with sales by region and product', 'url' => '/reports/sales'],
+            ],
             'tables' => [
                 // Define your table metadata using fluent classes. Example:
                 //

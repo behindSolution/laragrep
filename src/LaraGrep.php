@@ -135,12 +135,15 @@ class LaraGrep
 
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
 
+        $suggestions = $this->resolveSuggestions($scopeConfig);
+
         $messages = $this->promptBuilder->buildClarificationMessages(
             question: $question,
             tables: $tables,
             rules: $rules,
             userLanguage: $userLanguage,
             conversationHistory: $conversationHistory,
+            suggestions: $suggestions,
         );
 
         $aiResponse = $this->aiClient->chat($messages);
@@ -444,6 +447,40 @@ class LaraGrep
                 'iterations' => count($executedSteps),
             ],
         ];
+    }
+
+    /**
+     * @return array<int, array{label: string, description: string, url: string}>
+     */
+    protected function resolveSuggestions(array $scopeConfig): array
+    {
+        $raw = $scopeConfig['suggestions'] ?? [];
+
+        if (!is_array($raw) || $raw === []) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            array_map(function ($item) {
+                if (!is_array($item)) {
+                    return null;
+                }
+
+                $label = trim((string) ($item['label'] ?? ''));
+                $description = trim((string) ($item['description'] ?? ''));
+                $url = trim((string) ($item['url'] ?? ''));
+
+                if ($label === '' || $url === '') {
+                    return null;
+                }
+
+                return [
+                    'label' => $label,
+                    'description' => $description,
+                    'url' => $url,
+                ];
+            }, $raw),
+        ));
     }
 
     protected function resolveScopeConfig(?string $scope): array
