@@ -135,15 +135,12 @@ class LaraGrep
 
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
 
-        $suggestions = $this->resolveSuggestions($scopeConfig);
-
         $messages = $this->promptBuilder->buildClarificationMessages(
             question: $question,
             tables: $tables,
             rules: $rules,
             userLanguage: $userLanguage,
             conversationHistory: $conversationHistory,
-            suggestions: $suggestions,
         );
 
         $aiResponse = $this->aiClient->chat($messages);
@@ -447,6 +444,60 @@ class LaraGrep
                 'iterations' => count($executedSteps),
             ],
         ];
+    }
+
+    /**
+     * Resolve and filter suggestions relevant to the question.
+     *
+     * Returns only the suggestions that the AI considers relevant.
+     * Returns an empty array if no suggestions are configured or none match.
+     *
+     * @return array<int, array{label: string, url: string}>
+     */
+    public function matchSuggestions(string $question, ?string $scope = null): array
+    {
+        $scopeConfig = $this->resolveScopeConfig($scope);
+        $suggestions = $this->resolveSuggestions($scopeConfig);
+
+        if ($suggestions === []) {
+            return [];
+        }
+
+        return $this->filterSuggestions($question, $suggestions);
+    }
+
+    /**
+     * Ask the AI which suggestions are relevant to the question.
+     *
+     * @param  array<int, array{label: string, description: string, url: string}>  $suggestions
+     * @return array<int, array{label: string, url: string}>
+     */
+    protected function filterSuggestions(string $question, array $suggestions): array
+    {
+        try {
+            $messages = $this->promptBuilder->buildSuggestionFilterMessages($question, $suggestions);
+
+            $aiResponse = $this->aiClient->chat($messages);
+            $this->lastPromptTokens += $aiResponse->promptTokens;
+            $this->lastCompletionTokens += $aiResponse->completionTokens;
+
+            $indexes = $this->responseParser->parseSuggestionFilter($aiResponse->content);
+
+            $filtered = [];
+
+            foreach ($indexes as $index) {
+                if (isset($suggestions[$index])) {
+                    $filtered[] = [
+                        'label' => $suggestions[$index]['label'],
+                        'url' => $suggestions[$index]['url'],
+                    ];
+                }
+            }
+
+            return $filtered;
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     /**

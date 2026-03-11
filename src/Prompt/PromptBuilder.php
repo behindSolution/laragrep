@@ -400,7 +400,6 @@ class PromptBuilder
         array $rules,
         string $userLanguage = 'en',
         array $conversationHistory = [],
-        array $suggestions = [],
     ): array {
         $tableList = collect($tables)
             ->map(function (array $table) {
@@ -418,21 +417,6 @@ class PromptBuilder
             ->implode(PHP_EOL);
 
         $historyContext = $this->formatConversationHistory($conversationHistory);
-        $suggestionsContext = $this->formatSuggestions($suggestions);
-
-        $clarificationExample = $suggestions !== []
-            ? '{"action": "clarification", "questions": ["question1", "question2"], "suggestions": [{"label": "Page Name", "url": "/path"}]}'
-            : '{"action": "clarification", "questions": ["question1", "question2"]}';
-
-        $suggestionRules = null;
-
-        if ($suggestions !== []) {
-            $suggestionRules = 'IMPORTANT — Suggestions rules:'
-                . PHP_EOL . '- When the question overlaps with ANY available page, you MUST include a "suggestions" array in your response with the matching pages.'
-                . PHP_EOL . '- Each entry must have "label" and "url" copied exactly from the available pages list.'
-                . PHP_EOL . '- Do NOT mention page names or URLs inside "questions". Pages go ONLY in "suggestions".'
-                . PHP_EOL . '- If no available page is relevant, omit "suggestions" entirely.';
-        }
 
         $userParts = array_filter([
             'Clarification rules:',
@@ -440,27 +424,52 @@ class PromptBuilder
             'Available tables:',
             $tableList,
             $historyContext,
-            $suggestionsContext,
-            $suggestionRules,
             'User language: ' . $userLanguage,
             'Question: ' . $question,
             'Analyze the question against the rules above. Respond with ONLY a JSON object:',
-            '- If the question needs clarification: ' . $clarificationExample,
+            '- If the question needs clarification: {"action": "clarification", "questions": ["question1", "question2"]}',
             '- If the question is clear enough: {"action": "proceed"}',
             'Write the clarification questions in the user\'s language (' . $userLanguage . ').',
         ]);
 
-        $systemContent = 'You are a question analyzer. Your job is to check if the user\'s question has enough context to be answered accurately, based on the provided rules. If important information is missing according to the rules, ask clarification questions. If the question is clear enough, proceed.'
-            . ' When conversation history is provided, consider it as context — the current question may reference or continue a previous exchange.';
-
         return [
             [
                 'role' => 'system',
-                'content' => $systemContent,
+                'content' => 'You are a question analyzer. Your job is to check if the user\'s question has enough context to be answered accurately, based on the provided rules. If important information is missing according to the rules, ask clarification questions. If the question is clear enough, proceed.'
+                    . ' When conversation history is provided, consider it as context — the current question may reference or continue a previous exchange.',
             ],
             [
                 'role' => 'user',
                 'content' => implode(PHP_EOL . PHP_EOL, $userParts),
+            ],
+        ];
+    }
+
+    /**
+     * Build messages for filtering suggestions based on the user's question.
+     *
+     * @param  array<int, array{label: string, description: string, url: string}>  $suggestions
+     * @return array<int, array{role: string, content: string}>
+     */
+    public function buildSuggestionFilterMessages(string $question, array $suggestions): array
+    {
+        $suggestionList = collect($suggestions)
+            ->map(fn(array $s, int $i) => sprintf('%d. %s: %s', $i + 1, $s['label'], $s['description']))
+            ->implode(PHP_EOL);
+
+        return [
+            [
+                'role' => 'system',
+                'content' => 'You are a relevance matcher. Given a user question and a list of available pages, identify which pages are relevant. Respond with ONLY a JSON object.',
+            ],
+            [
+                'role' => 'user',
+                'content' => implode(PHP_EOL . PHP_EOL, [
+                    'Available pages:',
+                    $suggestionList,
+                    'Question: ' . $question,
+                    'Which pages are relevant to this question? Respond with ONLY: {"indexes": [1, 3]} using the page numbers above. If none are relevant, respond with: {"indexes": []}',
+                ]),
             ],
         ];
     }
@@ -501,28 +510,6 @@ class PromptBuilder
         }
 
         return "Conversation history:\n" . implode(PHP_EOL, $lines);
-    }
-
-    /**
-     * @param  array<int, array{label: string, description: string, url: string}>  $suggestions
-     */
-    protected function formatSuggestions(array $suggestions): ?string
-    {
-        if ($suggestions === []) {
-            return null;
-        }
-
-        $lines = array_map(
-            fn(array $s) => sprintf(
-                '- %s (%s)%s',
-                $s['label'],
-                $s['url'],
-                $s['description'] !== '' ? ': ' . $s['description'] : ''
-            ),
-            $suggestions,
-        );
-
-        return "Available pages:\n" . implode(PHP_EOL, $lines);
     }
 
     /**

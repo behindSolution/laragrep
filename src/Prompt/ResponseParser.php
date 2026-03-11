@@ -219,37 +219,48 @@ class ResponseParser
             throw new RuntimeException('Clarification action must include a non-empty "questions" array.');
         }
 
-        $result = [
+        return [
             'action' => 'clarification',
             'questions' => $filtered,
         ];
+    }
 
-        $suggestions = $decoded['suggestions'] ?? [];
+    /**
+     * Parse the AI response from a suggestion filter call.
+     *
+     * @return array<int, int>  Zero-based indexes of relevant suggestions.
+     */
+    public function parseSuggestionFilter(string $content): array
+    {
+        $content = trim($content);
+        $content = preg_replace('/^```(?:json)?\s*/im', '', $content);
+        $content = preg_replace('/\s*```\s*$/m', '', $content);
+        $content = trim($content);
 
-        if (is_array($suggestions) && $suggestions !== []) {
-            $result['suggestions'] = array_values(array_filter(
-                array_map(function ($s) {
-                    if (!is_array($s)) {
-                        return null;
-                    }
+        $decoded = json_decode($content, true);
 
-                    $label = trim((string) ($s['label'] ?? ''));
-                    $url = trim((string) ($s['url'] ?? ''));
+        if (!is_array($decoded)) {
+            $firstJson = $this->extractFirstJson($content);
 
-                    if ($label === '' || $url === '') {
-                        return null;
-                    }
-
-                    return ['label' => $label, 'url' => $url];
-                }, $suggestions),
-            ));
-
-            if ($result['suggestions'] === []) {
-                unset($result['suggestions']);
+            if ($firstJson !== null) {
+                $decoded = json_decode($firstJson, true);
             }
         }
 
-        return $result;
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $indexes = $decoded['indexes'] ?? [];
+
+        if (!is_array($indexes)) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            array_map(fn($i) => is_int($i) ? $i - 1 : null, $indexes),
+            fn($i) => $i !== null && $i >= 0,
+        ));
     }
 
     private function extractFirstJson(string $content): ?string

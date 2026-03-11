@@ -658,6 +658,7 @@ The clarification call is lightweight — it sends only table names and descript
 | Call | Input (typical) | Output (typical) |
 |---|---|---|
 | Clarification | ~200-400 tokens | ~15-40 tokens |
+| Suggestion Filter | ~100-200 tokens | ~10-20 tokens |
 | Reformulation | ~150-300 tokens | ~15-30 tokens |
 | Smart Schema Filter | ~150-300 tokens | ~15-30 tokens |
 | Agent Loop (per iteration) | ~500-2000+ tokens | ~100-300 tokens |
@@ -685,7 +686,7 @@ If your application has existing dashboards or reports that overlap with common 
 ],
 ```
 
-Each suggestion needs a `label` (what the user sees), a `description` (what the AI uses to decide relevance), and a `url`. The AI only suggests pages when relevant — if the question doesn't overlap, no suggestion is made. Suggestions are returned as a structured `suggestions` array (separate from `questions`), so the frontend can render them as clickable links.
+Each suggestion needs a `label` (what the user sees), a `description` (what the AI uses to judge relevance), and a `url`. When clarification is triggered and suggestions are configured, a separate lightweight AI call filters which suggestions are relevant to the question. Only matching suggestions are included in the response — if none match, the `suggestions` field is omitted. The frontend can render them as clickable links alongside the clarification questions.
 
 With the feature disabled or no `clarification_rules` defined, zero API calls are made — `clarifyQuestion()` returns `null` immediately.
 

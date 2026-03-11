@@ -83,6 +83,17 @@ class QueryController extends Controller
             }
         }
 
+        // Filter suggestions independently (lightweight AI call)
+        $suggestions = [];
+
+        if ($clarificationAnswers === null) {
+            try {
+                $suggestions = $this->service->matchSuggestions($question, $scope);
+            } catch (Throwable) {
+                // Suggestion filtering must never block the main flow
+            }
+        }
+
         if (config('laragrep.clarification.enabled', false) && $clarificationAnswers === null) {
             try {
                 $clarification = ($this->recorder !== null)
@@ -91,6 +102,10 @@ class QueryController extends Controller
 
                 if ($clarification !== null) {
                     $response = $clarification;
+
+                    if ($suggestions !== []) {
+                        $response['suggestions'] = $suggestions;
+                    }
 
                     if ($conversationId !== null) {
                         $response['conversation_id'] = $conversationId;
@@ -155,6 +170,10 @@ class QueryController extends Controller
             }
 
             return response()->json($response, 500);
+        }
+
+        if ($suggestions !== []) {
+            $answer['suggestions'] = $suggestions;
         }
 
         if ($conversationId !== null) {
