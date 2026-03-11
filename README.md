@@ -596,6 +596,9 @@ User question → AI checks against rules → Missing context?
 {
     "action": "clarification",
     "questions": ["What date range?", "Which store?"],
+    "suggestions": [
+        {"label": "Monthly Sales Report", "url": "/reports/sales"}
+    ],
     "original_question": "Show me the sales",
     "conversation_id": "uuid"
 }
@@ -682,7 +685,7 @@ If your application has existing dashboards or reports that overlap with common 
 ],
 ```
 
-Each suggestion needs a `label` (what the user sees), a `description` (what the AI uses to decide relevance), and a `url`. The AI only suggests pages when relevant — if the question doesn't overlap, no suggestion is made. This doesn't change the response contract: suggestions come as regular clarification questions, so no frontend changes are needed.
+Each suggestion needs a `label` (what the user sees), a `description` (what the AI uses to decide relevance), and a `url`. The AI only suggests pages when relevant — if the question doesn't overlap, no suggestion is made. Suggestions are returned as a structured `suggestions` array (separate from `questions`), so the frontend can render them as clickable links.
 
 With the feature disabled or no `clarification_rules` defined, zero API calls are made — `clarifyQuestion()` returns `null` immediately.
 

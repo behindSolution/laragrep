@@ -420,6 +420,10 @@ class PromptBuilder
         $historyContext = $this->formatConversationHistory($conversationHistory);
         $suggestionsContext = $this->formatSuggestions($suggestions);
 
+        $clarificationExample = $suggestions !== []
+            ? '{"action": "clarification", "questions": ["question1", "question2"], "suggestions": [{"label": "Page Name", "url": "/path"}]}'
+            : '{"action": "clarification", "questions": ["question1", "question2"]}';
+
         $userParts = array_filter([
             'Clarification rules:',
             $rulesList,
@@ -430,17 +434,16 @@ class PromptBuilder
             'User language: ' . $userLanguage,
             'Question: ' . $question,
             'Analyze the question against the rules above. Respond with ONLY a JSON object:',
-            '- If the question needs clarification: {"action": "clarification", "questions": ["question1", "question2"]}',
+            '- If the question needs clarification: ' . $clarificationExample,
             '- If the question is clear enough: {"action": "proceed"}',
+            $suggestions !== []
+                ? '- "suggestions" is optional. Only include it when the question overlaps with an available page. Each entry must have "label" and "url" from the available pages list. Do NOT include suggestions as text inside "questions".'
+                : null,
             'Write the clarification questions in the user\'s language (' . $userLanguage . ').',
         ]);
 
         $systemContent = 'You are a question analyzer. Your job is to check if the user\'s question has enough context to be answered accurately, based on the provided rules. If important information is missing according to the rules, ask clarification questions. If the question is clear enough, proceed.'
             . ' When conversation history is provided, consider it as context — the current question may reference or continue a previous exchange.';
-
-        if ($suggestions !== []) {
-            $systemContent .= ' When the user\'s question overlaps with an existing page/dashboard listed in "Available pages", include a clarification question offering the existing page as an alternative (e.g., "Would you like me to query the data now, or would you prefer to check the existing page: [label] (url)?"). This should be a natural question, not a redirect.';
-        }
 
         return [
             [

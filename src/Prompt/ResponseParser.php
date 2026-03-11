@@ -219,10 +219,37 @@ class ResponseParser
             throw new RuntimeException('Clarification action must include a non-empty "questions" array.');
         }
 
-        return [
+        $result = [
             'action' => 'clarification',
             'questions' => $filtered,
         ];
+
+        $suggestions = $decoded['suggestions'] ?? [];
+
+        if (is_array($suggestions) && $suggestions !== []) {
+            $result['suggestions'] = array_values(array_filter(
+                array_map(function ($s) {
+                    if (!is_array($s)) {
+                        return null;
+                    }
+
+                    $label = trim((string) ($s['label'] ?? ''));
+                    $url = trim((string) ($s['url'] ?? ''));
+
+                    if ($label === '' || $url === '') {
+                        return null;
+                    }
+
+                    return ['label' => $label, 'url' => $url];
+                }, $suggestions),
+            ));
+
+            if ($result['suggestions'] === []) {
+                unset($result['suggestions']);
+            }
+        }
+
+        return $result;
     }
 
     private function extractFirstJson(string $content): ?string
