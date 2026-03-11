@@ -20,6 +20,8 @@
                 <span class="inline-block px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">success</span>
             @elseif($entry->status === 'clarification')
                 <span class="inline-block px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">clarification</span>
+            @elseif($entry->status === 'suggestion')
+                <span class="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">suggestion</span>
             @else
                 <span class="inline-block px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">error</span>
             @endif
@@ -118,7 +120,15 @@
         </div>
     @endif
 
-    @if($entry->status !== 'clarification')
+    {{-- Matched Suggestions --}}
+    @if($entry->status === 'suggestion' && $entry->summary)
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <h3 class="text-sm font-semibold text-blue-700 mb-2">Matched Suggestions</h3>
+            <p class="text-sm text-blue-800">{{ $entry->summary }}</p>
+        </div>
+    @endif
+
+    @if(!in_array($entry->status, ['clarification', 'suggestion']))
         {{-- Agent Loop Steps --}}
         @if(count($steps) > 0)
             <div class="mb-4">

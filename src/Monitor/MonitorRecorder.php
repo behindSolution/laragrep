@@ -102,6 +102,55 @@ class MonitorRecorder
         return $result;
     }
 
+    public function matchSuggestions(
+        string $question,
+        ?string $scope = null,
+        string|int|null $userId = null,
+    ): array {
+        $startTime = microtime(true);
+        $result = [];
+
+        try {
+            $result = $this->laraGrep->matchSuggestions($question, $scope);
+        } catch (Throwable) {
+            return [];
+        } finally {
+            $durationMs = (microtime(true) - $startTime) * 1000;
+            $tokenUsage = $this->laraGrep->getLastTokenUsage();
+
+            if ($tokenUsage['prompt_tokens'] > 0) {
+                try {
+                    $this->store->record([
+                        'question' => mb_substr($question, 0, 1000),
+                        'scope' => $scope ?? 'default',
+                        'model' => $this->model ?: null,
+                        'provider' => $this->provider ?: null,
+                        'conversation_id' => null,
+                        'user_id' => $userId,
+                        'status' => 'suggestion',
+                        'summary' => $result !== [] ? implode(', ', array_column($result, 'label')) : null,
+                        'steps' => '[]',
+                        'error_message' => null,
+                        'error_class' => null,
+                        'error_trace' => null,
+                        'duration_ms' => round($durationMs, 2),
+                        'iterations' => 0,
+                        'prompt_tokens' => $tokenUsage['prompt_tokens'],
+                        'completion_tokens' => $tokenUsage['completion_tokens'],
+                        'token_estimate' => 0,
+                        'tables_total' => null,
+                        'tables_filtered' => null,
+                        'debug_queries' => '[]',
+                    ]);
+                } catch (Throwable) {
+                    // Monitoring must never break the actual operation
+                }
+            }
+        }
+
+        return $result;
+    }
+
     public function reformulateQuestion(
         string $question,
         array $answers,

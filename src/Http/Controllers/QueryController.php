@@ -88,7 +88,9 @@ class QueryController extends Controller
 
         if ($clarificationAnswers === null) {
             try {
-                $suggestions = $this->service->matchSuggestions($question, $scope);
+                $suggestions = ($this->recorder !== null)
+                    ? $this->recorder->matchSuggestions($question, $scope, $userId)
+                    : $this->service->matchSuggestions($question, $scope);
             } catch (Throwable) {
                 // Suggestion filtering must never block the main flow
             }

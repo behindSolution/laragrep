@@ -25,6 +25,7 @@
                     <option value="success" {{ ($filters['status'] ?? '') === 'success' ? 'selected' : '' }}>Success</option>
                     <option value="error" {{ ($filters['status'] ?? '') === 'error' ? 'selected' : '' }}>Error</option>
                     <option value="clarification" {{ ($filters['status'] ?? '') === 'clarification' ? 'selected' : '' }}>Clarification</option>
+                    <option value="suggestion" {{ ($filters['status'] ?? '') === 'suggestion' ? 'selected' : '' }}>Suggestion</option>
                 </select>
             </div>
             <div>
@@ -74,6 +75,8 @@
                                 <span class="inline-block px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">success</span>
                             @elseif($entry->status === 'clarification')
                                 <span class="inline-block px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">clarification</span>
+                            @elseif($entry->status === 'suggestion')
+                                <span class="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">suggestion</span>
                             @else
                                 <span class="inline-block px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">error</span>
                             @endif
