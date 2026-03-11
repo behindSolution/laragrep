@@ -424,6 +424,16 @@ class PromptBuilder
             ? '{"action": "clarification", "questions": ["question1", "question2"], "suggestions": [{"label": "Page Name", "url": "/path"}]}'
             : '{"action": "clarification", "questions": ["question1", "question2"]}';
 
+        $suggestionRules = null;
+
+        if ($suggestions !== []) {
+            $suggestionRules = 'IMPORTANT — Suggestions rules:'
+                . PHP_EOL . '- When the question overlaps with ANY available page, you MUST include a "suggestions" array in your response with the matching pages.'
+                . PHP_EOL . '- Each entry must have "label" and "url" copied exactly from the available pages list.'
+                . PHP_EOL . '- Do NOT mention page names or URLs inside "questions". Pages go ONLY in "suggestions".'
+                . PHP_EOL . '- If no available page is relevant, omit "suggestions" entirely.';
+        }
+
         $userParts = array_filter([
             'Clarification rules:',
             $rulesList,
@@ -431,14 +441,12 @@ class PromptBuilder
             $tableList,
             $historyContext,
             $suggestionsContext,
+            $suggestionRules,
             'User language: ' . $userLanguage,
             'Question: ' . $question,
             'Analyze the question against the rules above. Respond with ONLY a JSON object:',
             '- If the question needs clarification: ' . $clarificationExample,
             '- If the question is clear enough: {"action": "proceed"}',
-            $suggestions !== []
-                ? '- "suggestions" is optional. Only include it when the question overlaps with an available page. Each entry must have "label" and "url" from the available pages list. Do NOT include suggestions as text inside "questions".'
-                : null,
             'Write the clarification questions in the user\'s language (' . $userLanguage . ').',
         ]);
 
