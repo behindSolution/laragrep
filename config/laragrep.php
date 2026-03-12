@@ -152,6 +152,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Clarification System Prompt
+    |--------------------------------------------------------------------------
+    |
+    | Additional instructions appended to the clarification system prompt.
+    | Use this to add rules like "Never mention table names in questions"
+    | or any other behavior you want during the clarification step.
+    | Leave null to use only the default clarification prompt.
+    |
+    */
+
+    'clarify_system_prompt' => env('LARAGREP_CLARIFY_SYSTEM_PROMPT'),
+
+    /*
+    |--------------------------------------------------------------------------
     | User Language
     |--------------------------------------------------------------------------
     |

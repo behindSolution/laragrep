@@ -400,6 +400,7 @@ class PromptBuilder
         array $rules,
         string $userLanguage = 'en',
         array $conversationHistory = [],
+        ?string $customSystemPrompt = null,
     ): array {
         $tableList = collect($tables)
             ->map(function (array $table) {
@@ -432,11 +433,19 @@ class PromptBuilder
             'Write the clarification questions in the user\'s language (' . $userLanguage . ').',
         ]);
 
+        $systemContent = 'You are a question analyzer. Your job is to check if the user\'s question has enough context to be answered accurately, based on the provided rules. If important information is missing according to the rules, ask clarification questions. If the question is clear enough, proceed.'
+            . ' When conversation history is provided, consider it as context — the current question may reference or continue a previous exchange.';
+
+        $customSystemPrompt = is_string($customSystemPrompt) ? trim($customSystemPrompt) : '';
+
+        if ($customSystemPrompt !== '') {
+            $systemContent .= PHP_EOL . PHP_EOL . $customSystemPrompt;
+        }
+
         return [
             [
                 'role' => 'system',
-                'content' => 'You are a question analyzer. Your job is to check if the user\'s question has enough context to be answered accurately, based on the provided rules. If important information is missing according to the rules, ask clarification questions. If the question is clear enough, proceed.'
-                    . ' When conversation history is provided, consider it as context — the current question may reference or continue a previous exchange.',
+                'content' => $systemContent,
             ],
             [
                 'role' => 'user',

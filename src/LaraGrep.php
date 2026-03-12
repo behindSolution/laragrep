@@ -141,6 +141,7 @@ class LaraGrep
             rules: $rules,
             userLanguage: $userLanguage,
             conversationHistory: $conversationHistory,
+            customSystemPrompt: $this->config['clarify_system_prompt'] ?? null,
         );
 
         $aiResponse = $this->aiClient->chat($messages);

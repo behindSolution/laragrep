@@ -568,6 +568,14 @@ When users ask vague questions ("Show me the sales"), the AI may guess filters o
 LARAGREP_CLARIFICATION_ENABLED=true
 ```
 
+**Custom clarification prompt:**
+
+Add extra instructions to the clarification system prompt — for example, to prevent the AI from mentioning internal table names in its questions:
+
+```env
+LARAGREP_CLARIFY_SYSTEM_PROMPT="Never mention database table names, column names, or any technical database terms in your clarification questions. Use only business-friendly language."
+```
+
 **Define rules per context:**
 
 ```php
@@ -964,6 +972,7 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_MAX_QUERY_TIME` | `3` | Max query execution time (seconds) |
 | `LARAGREP_SMART_SCHEMA` | — | Table count threshold for smart filtering |
 | `LARAGREP_CLARIFICATION_ENABLED` | `false` | Enable pre-query question clarification |
+| `LARAGREP_CLARIFY_SYSTEM_PROMPT` | — | Extra instructions for clarification prompt |
 | `LARAGREP_SCHEMA_MODE` | `manual` | Schema loading mode |
 | `LARAGREP_USER_LANGUAGE` | `en` | AI response language |
 | `LARAGREP_RESPONSE_FORMAT` | `html` | Summary format: `html`, `markdown`, or `text` |
