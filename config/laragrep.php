@@ -278,6 +278,8 @@ return [
         'connection' => env('LARAGREP_MONITOR_CONNECTION', 'sqlite'),
         'table' => env('LARAGREP_MONITOR_TABLE', 'laragrep_logs'),
         'retention_days' => (int) env('LARAGREP_MONITOR_RETENTION_DAYS', 30),
+        'username' => env('LARAGREP_MONITOR_USERNAME'),
+        'password' => env('LARAGREP_MONITOR_PASSWORD'),
         'middleware' => [],
     ],
 

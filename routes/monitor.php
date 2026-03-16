@@ -2,11 +2,12 @@
 
 use Illuminate\Support\Facades\Route;
 use LaraGrep\Http\Controllers\MonitorController;
+use LaraGrep\Http\Middleware\MonitorBasicAuth;
 
 Route::group([
     'prefix' => config('laragrep.route.prefix', 'laragrep') . '/monitor',
     'middleware' => array_merge(
-        ['web'],
+        ['web', MonitorBasicAuth::class],
         config('laragrep.monitor.middleware', [])
     ),
 ], function () {
