@@ -362,4 +362,64 @@ class ResponseParserTest extends TestCase
 
         $this->assertSame($question, $result);
     }
+
+    // ── parseAnswerGuard ────────────────────────────────────────
+
+    public function test_parse_answer_guard_returns_summary(): void
+    {
+        $result = $this->parser->parseAnswerGuard('{"summary": "There are 42 users."}');
+
+        $this->assertSame('There are 42 users.', $result);
+    }
+
+    public function test_parse_answer_guard_strips_markdown_fences(): void
+    {
+        $result = $this->parser->parseAnswerGuard("```json\n{\"summary\": \"Done.\"}\n```");
+
+        $this->assertSame('Done.', $result);
+    }
+
+    public function test_parse_answer_guard_extracts_first_json_with_surrounding_text(): void
+    {
+        $content = 'Here is the safe version: {"summary": "Trimmed answer."} trailing';
+
+        $result = $this->parser->parseAnswerGuard($content);
+
+        $this->assertSame('Trimmed answer.', $result);
+    }
+
+    public function test_parse_answer_guard_trims_summary(): void
+    {
+        $result = $this->parser->parseAnswerGuard('{"summary": "  Padded answer.  "}');
+
+        $this->assertSame('Padded answer.', $result);
+    }
+
+    public function test_parse_answer_guard_invalid_json_throws(): void
+    {
+        $this->expectException(RuntimeException::class);
+
+        $this->parser->parseAnswerGuard('not json');
+    }
+
+    public function test_parse_answer_guard_missing_summary_throws(): void
+    {
+        $this->expectException(RuntimeException::class);
+
+        $this->parser->parseAnswerGuard('{"action": "pass"}');
+    }
+
+    public function test_parse_answer_guard_non_string_summary_throws(): void
+    {
+        $this->expectException(RuntimeException::class);
+
+        $this->parser->parseAnswerGuard('{"summary": 42}');
+    }
+
+    public function test_parse_answer_guard_empty_summary_throws(): void
+    {
+        $this->expectException(RuntimeException::class);
+
+        $this->parser->parseAnswerGuard('{"summary": "   "}');
+    }
 }

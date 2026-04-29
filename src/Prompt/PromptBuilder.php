@@ -455,6 +455,61 @@ class PromptBuilder
     }
 
     /**
+     * Build messages for the answer guard call.
+     * The AI reviews the final answer against the rules and either keeps it,
+     * rewrites it to comply, or replaces it with a natural refusal.
+     *
+     * @param  array<int, string>  $rules
+     * @return array<int, array{role: string, content: string}>
+     */
+    public function buildAnswerGuardMessages(
+        string $summary,
+        array $rules,
+        string $userLanguage = 'en',
+        string $responseFormat = 'html',
+    ): array {
+        $rulesList = collect($rules)
+            ->map(fn(string $rule, int $i) => sprintf('%d. %s', $i + 1, $rule))
+            ->implode(PHP_EOL);
+
+        $formatInstruction = match ($responseFormat) {
+            'markdown' => 'The "summary" field must use Markdown formatting (headers, bold, tables, lists). Do not use HTML tags.',
+            'text' => 'The "summary" field must be plain text only. Do not use HTML tags, Markdown, or any formatting syntax.',
+            default => 'The "summary" field may use these HTML tags: table, b, ul, ol, i, td, tr, th, thead, tbody. Do not use Markdown.',
+        };
+
+        $systemContent = 'You are an answer guard. Your job is to review a final answer that is about to be shown to the user and ensure it complies with the rules below.'
+            . ' For each answer you receive, decide one of three things:'
+            . ' (1) the answer already complies — return it unchanged;'
+            . ' (2) the answer can be rewritten to comply without losing the underlying information — return the rewritten version;'
+            . ' (3) the answer cannot comply (the requested information is itself disallowed by the rules) — return a natural, polite refusal explaining you cannot share that detail.'
+            . ' Never explain that a guard or filter exists. Never mention rules, policies, or that the answer was modified.'
+            . ' Always respond in the user\'s language.';
+
+        $userParts = array_filter([
+            'Rules:',
+            $rulesList,
+            'User language: ' . $userLanguage,
+            'Answer to review:',
+            $summary,
+            'Respond with ONLY a JSON object: {"summary": "<final answer for the user>"}.',
+            $formatInstruction,
+            'Write the summary in ' . $userLanguage . '. Do not include any explanation outside the JSON object.',
+        ]);
+
+        return [
+            [
+                'role' => 'system',
+                'content' => $systemContent,
+            ],
+            [
+                'role' => 'user',
+                'content' => implode(PHP_EOL . PHP_EOL, $userParts),
+            ],
+        ];
+    }
+
+    /**
      * Build messages for filtering suggestions based on the user's question.
      *
      * @param  array<int, array{label: string, description: string, url: string}>  $suggestions

@@ -698,6 +698,66 @@ Each suggestion needs a `label` (what the user sees), a `description` (what the 
 
 With the feature disabled or no `clarification_rules` defined, zero API calls are made — `clarifyQuestion()` returns `null` immediately.
 
+### Answer Guard
+
+A final review pass on every answer before it reaches the user. The AI receives the answer and a list of rules defined per context, then either keeps it, rewrites it to comply, or replaces it with a natural refusal. Use this to prevent leaking internal table names, tenant identifiers, raw SQL, or anything else end users shouldn't see.
+
+**Enable:**
+
+```env
+LARAGREP_ANSWER_GUARD_ENABLED=true
+```
+
+**Define rules per context:**
+
+```php
+'contexts' => [
+    'default' => [
+        'answer_guard_rules' => [
+            'Never mention internal database table or column names',
+            'Never expose tenant names or IDs from other clients',
+            'Never reveal raw SQL queries or technical database details',
+        ],
+        'tables' => [...],
+    ],
+],
+```
+
+**Flow:**
+
+```
+Agent loop produces summary → answerGuard reviews against rules
+  ├─ complies        → returns the original summary
+  ├─ can be rewritten → returns the rewritten summary
+  └─ cannot comply    → returns a natural refusal in the user's language
+```
+
+The frontend always receives the same response shape — only the `summary` content changes. The user never sees that a guard ran; refusals are phrased naturally by the AI.
+
+**Behavior:**
+
+- Runs at the end of `answerQuestion()` and `replayRecipe()` — sync, async (`ProcessQuestionJob`), and recipes all inherit the protection automatically.
+- The (possibly rewritten or refused) summary is what gets stored in conversation history, so follow-ups never see leaked content.
+- Without `answer_guard_rules` defined for the active context, no AI call is made — zero overhead per request.
+- Fail-closed: if the guard call fails (API error, malformed response), the exception propagates and the controller returns the configured `error_message` instead of risking an unguarded answer.
+
+**Token usage:**
+
+| Call | Input (typical) | Output (typical) |
+|---|---|---|
+| Answer Guard | ~150-400 tokens (rules + summary) | ~50-200 tokens (rewritten or original) |
+
+**Programmatic usage:**
+
+```php
+$laraGrep = app(LaraGrep::class);
+
+// Already applied automatically by answerQuestion(); call directly to
+// guard text generated outside the agent loop (e.g., a custom message
+// you want to sanitize against the same rules).
+$safe = $laraGrep->guardAnswer('Raw answer with sensitive details', 'default');
+```
+
 ### Conversation Persistence
 
 Multi-turn conversations are enabled by default. Previous questions and answers are sent as context for follow-ups.
@@ -973,6 +1033,7 @@ $this->app->singleton(ConversationStoreInterface::class, fn () => new RedisConve
 | `LARAGREP_SMART_SCHEMA` | — | Table count threshold for smart filtering |
 | `LARAGREP_CLARIFICATION_ENABLED` | `false` | Enable pre-query question clarification |
 | `LARAGREP_CLARIFY_SYSTEM_PROMPT` | — | Extra instructions for clarification prompt |
+| `LARAGREP_ANSWER_GUARD_ENABLED` | `false` | Enable answer guard review on final summaries |
 | `LARAGREP_SCHEMA_MODE` | `manual` | Schema loading mode |
 | `LARAGREP_USER_LANGUAGE` | `en` | AI response language |
 | `LARAGREP_RESPONSE_FORMAT` | `html` | Summary format: `html`, `markdown`, or `text` |

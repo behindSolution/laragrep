@@ -226,6 +226,43 @@ class ResponseParser
     }
 
     /**
+     * Parse the AI response from an answer guard call.
+     *
+     * @return string  The (possibly rewritten or refused) summary to deliver to the user.
+     *
+     * @throws RuntimeException
+     */
+    public function parseAnswerGuard(string $content): string
+    {
+        $content = trim($content);
+        $content = preg_replace('/^```(?:json)?\s*/im', '', $content);
+        $content = preg_replace('/\s*```\s*$/m', '', $content);
+        $content = trim($content);
+
+        $decoded = json_decode($content, true);
+
+        if (!is_array($decoded)) {
+            $firstJson = $this->extractFirstJson($content);
+
+            if ($firstJson !== null) {
+                $decoded = json_decode($firstJson, true);
+            }
+        }
+
+        if (!is_array($decoded) || !isset($decoded['summary']) || !is_string($decoded['summary'])) {
+            throw new RuntimeException('Answer guard response must be a JSON object with a "summary" string.');
+        }
+
+        $summary = trim($decoded['summary']);
+
+        if ($summary === '') {
+            throw new RuntimeException('Answer guard returned an empty summary.');
+        }
+
+        return $summary;
+    }
+
+    /**
      * Parse the AI response from a suggestion filter call.
      *
      * @return array<int, int>  Zero-based indexes of relevant suggestions.

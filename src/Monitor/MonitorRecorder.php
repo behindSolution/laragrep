@@ -172,6 +172,16 @@ class MonitorRecorder
         return $result;
     }
 
+    public function guardAnswer(
+        string $summary,
+        ?string $scope = null,
+    ): string {
+        // Token usage is accumulated in LaraGrep. When the guard runs as part
+        // of answerQuestion(), it's already covered by that entry's tokens.
+        // No separate monitoring entry — it's a lightweight review call.
+        return $this->laraGrep->guardAnswer($summary, $scope);
+    }
+
     public function getLaraGrep(): LaraGrep
     {
         return $this->laraGrep;

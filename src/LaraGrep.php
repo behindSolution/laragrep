@@ -78,11 +78,33 @@ class LaraGrep
 
         $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep, $maxRows);
 
+        $result['summary'] = $this->runAnswerGuard($result['summary'], $scopeConfig, $userLanguage, $responseFormat);
+
         if ($conversationId !== null && $this->conversationStore !== null) {
             $this->conversationStore->appendExchange($conversationId, $question, $result['summary']);
         }
 
         return $result;
+    }
+
+    /**
+     * Review an answer against the scope's `answer_guard_rules` and return the
+     * final version to deliver to the user (unchanged, rewritten, or refused).
+     *
+     * Returns the original summary unchanged when the guard is disabled or no
+     * rules are configured for the scope. When called standalone, resets the
+     * token counters so callers can read `getLastTokenUsage()` for cost.
+     */
+    public function guardAnswer(string $summary, ?string $scope = null): string
+    {
+        $this->lastPromptTokens = 0;
+        $this->lastCompletionTokens = 0;
+
+        $scopeConfig = $this->resolveScopeConfig($scope);
+        $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
+        $responseFormat = $scopeConfig['response_format'] ?? $this->config['response_format'] ?? 'html';
+
+        return $this->runAnswerGuard($summary, $scopeConfig, $userLanguage, $responseFormat);
     }
 
     /**
@@ -271,7 +293,11 @@ class LaraGrep
             maxRows: $maxRows,
         );
 
-        return $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep, $maxRows);
+        $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep, $maxRows);
+
+        $result['summary'] = $this->runAnswerGuard($result['summary'], $scopeConfig, $userLanguage, $responseFormat);
+
+        return $result;
     }
 
     /**
@@ -309,6 +335,56 @@ class LaraGrep
         }
 
         return $decoded;
+    }
+
+    /**
+     * Apply the answer guard if the scope has rules configured and the
+     * feature is enabled. Returns the (possibly rewritten or refused) summary.
+     * Falls back to the original summary if the guard call fails.
+     */
+    protected function runAnswerGuard(
+        string $summary,
+        array $scopeConfig,
+        string $userLanguage,
+        string $responseFormat,
+    ): string {
+        if (empty($this->config['answer_guard']['enabled'])) {
+            return $summary;
+        }
+
+        $rules = $scopeConfig['answer_guard_rules'] ?? [];
+
+        if (!is_array($rules) || $rules === []) {
+            return $summary;
+        }
+
+        $rules = array_values(array_filter(
+            array_map(fn($r) => is_string($r) ? trim($r) : '', $rules),
+            fn($r) => $r !== '',
+        ));
+
+        if ($rules === []) {
+            return $summary;
+        }
+
+        $summary = trim($summary);
+
+        if ($summary === '') {
+            return $summary;
+        }
+
+        $messages = $this->promptBuilder->buildAnswerGuardMessages(
+            summary: $summary,
+            rules: $rules,
+            userLanguage: $userLanguage,
+            responseFormat: $responseFormat,
+        );
+
+        $aiResponse = $this->aiClient->chat($messages);
+        $this->lastPromptTokens += $aiResponse->promptTokens;
+        $this->lastCompletionTokens += $aiResponse->completionTokens;
+
+        return $this->responseParser->parseAnswerGuard($aiResponse->content);
     }
 
     /**

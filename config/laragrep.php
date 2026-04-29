@@ -123,6 +123,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Answer Guard
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, LaraGrep runs a final review pass on the answer before
+    | returning it to the user. The AI receives the answer and the rules
+    | defined per context (`answer_guard_rules`) and either keeps the answer,
+    | rewrites it to comply, or replaces it with a natural refusal. Use this
+    | to prevent leaking internal table names, tenant identifiers, raw SQL,
+    | or anything else you don't want exposed to end users.
+    |
+    | The guard only runs when `answer_guard_rules` are defined for the
+    | active context — no rules, no AI call, no overhead.
+    |
+    */
+
+    'answer_guard' => [
+        'enabled' => (bool) env('LARAGREP_ANSWER_GUARD_ENABLED', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Smart Schema
     |--------------------------------------------------------------------------
     |
@@ -233,6 +254,15 @@ return [
             'clarification_rules' => [
                 // 'Always ask for a date range when the question involves time-based data',
                 // 'Always ask which store/branch if not specified',
+            ],
+            'answer_guard_rules' => [
+                // Rules applied to the AI's final answer before it reaches the user.
+                // The AI keeps the answer if it complies, rewrites it to comply, or
+                // replaces it with a natural refusal when compliance isn't possible.
+                //
+                // 'Never mention internal database table or column names',
+                // 'Never expose tenant names or IDs from other clients',
+                // 'Never reveal raw SQL queries or technical database details',
             ],
             'suggestions' => [
                 // Links to existing dashboards or reports. When a user's question
