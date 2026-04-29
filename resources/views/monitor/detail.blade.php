@@ -5,6 +5,9 @@
 @php
     $steps = json_decode($entry->steps, true) ?: [];
     $debugQueries = json_decode($entry->debug_queries, true) ?: [];
+    $metadata = !empty($entry->metadata) ? (json_decode($entry->metadata, true) ?: []) : [];
+    $guard = $metadata['guard'] ?? null;
+    $globalFilters = $metadata['global_filters'] ?? [];
 @endphp
 
 @section('content')
@@ -77,6 +80,28 @@
             @endif
         </div>
     </div>
+
+    {{-- Global Filters Active --}}
+    @if(!empty($globalFilters))
+        <div class="bg-white rounded-lg border p-4 mb-4">
+            <div class="flex items-center gap-2 mb-3">
+                <h3 class="text-sm font-semibold text-gray-700">Global Filters Active</h3>
+                <span class="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">{{ count($globalFilters) }} table{{ count($globalFilters) === 1 ? '' : 's' }}</span>
+            </div>
+            <p class="text-xs text-gray-500 mb-3">These SQL fragments were required in every query touching the listed tables. The validator rejected any query that referenced the table without the fragment.</p>
+            <div class="space-y-2">
+                @foreach($globalFilters as $table => $fragment)
+                    <div class="border rounded p-3 bg-gray-50">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xs uppercase tracking-wide text-gray-500">Table</span>
+                            <code class="text-xs font-mono px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded">{{ $table }}</code>
+                        </div>
+                        <pre class="text-xs font-mono whitespace-pre-wrap break-all bg-white p-2 rounded border mt-1">{{ $fragment }}</pre>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
 
     {{-- Smart Schema --}}
     @if($entry->tables_total && $entry->tables_total != $entry->tables_filtered)
@@ -186,9 +211,38 @@
         {{-- Summary --}}
         @if($entry->summary)
             <div class="bg-white rounded-lg border p-4 mb-4">
-                <h3 class="text-sm font-semibold text-gray-700 mb-2">Final Answer</h3>
+                <div class="flex items-center gap-2 mb-2">
+                    <h3 class="text-sm font-semibold text-gray-700">Final Answer</h3>
+                    @if(!empty($guard['ran']))
+                        @if($guard['modified'])
+                            <span class="inline-block px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium" title="The answer guard reviewed and rewrote this answer.">guard: rewritten</span>
+                        @else
+                            <span class="inline-block px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-medium" title="The answer guard reviewed this answer and kept it unchanged.">guard: passed</span>
+                        @endif
+                    @endif
+                </div>
                 <div class="text-sm prose max-w-none whitespace-pre-line">{{ $entry->summary }}</div>
             </div>
+        @endif
+
+        {{-- Answer Guard (only when guard rewrote the original) --}}
+        @if(!empty($guard['ran']) && $guard['modified'] && !empty($guard['original_summary']))
+            <details class="bg-white rounded-lg border mb-4">
+                <summary class="px-4 py-3 cursor-pointer hover:bg-gray-50 text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <span>Answer Guard — Original vs Final</span>
+                    <span class="inline-block px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">rewritten</span>
+                </summary>
+                <div class="px-4 pb-4 border-t mt-3 grid md:grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-xs text-gray-500 uppercase tracking-wide">Original (pre-guard)</span>
+                        <div class="text-sm mt-1 bg-amber-50 border border-amber-200 rounded p-3 whitespace-pre-line">{{ $guard['original_summary'] }}</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-gray-500 uppercase tracking-wide">Delivered to user</span>
+                        <div class="text-sm mt-1 bg-emerald-50 border border-emerald-200 rounded p-3 whitespace-pre-line">{{ $entry->summary }}</div>
+                    </div>
+                </div>
+            </details>
         @endif
 
         {{-- Debug Queries --}}

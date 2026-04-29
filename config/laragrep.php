@@ -264,6 +264,41 @@ return [
                 // 'Never expose tenant names or IDs from other clients',
                 // 'Never reveal raw SQL queries or technical database details',
             ],
+            'global_filters' => null,
+            // Mandatory SQL fragments injected into every query touching specific
+            // tables (security/access scopes that mirror Eloquent global scopes).
+            //
+            // Accepts:
+            //  - null or [] : no filters applied (default).
+            //  - array      : static map of `table_name => sql_fragment`.
+            //  - Closure    : evaluated per request (after auth and request context
+            //                 are available). Must return a static array.
+            //
+            // For each filter, when the AI's query references the table in FROM/JOIN,
+            // the exact SQL fragment must appear in the query — otherwise the query
+            // is rejected and the AI is forced to retry with the filter included.
+            //
+            // Values must be inlined (no `?` placeholders) since they come from
+            // server-trusted sources (auth, tenant context). Cast IDs to (int) and
+            // sanitize strings before inlining.
+            //
+            // Example:
+            //
+            // 'global_filters' => function () {
+            //     $user = auth()->user();
+            //
+            //     if (!$user || $user->isAdmin()) {
+            //         return [];
+            //     }
+            //
+            //     $assetIds = implode(',', $user->visibleAssetIds());
+            //     $companyId = (int) $user->company_id;
+            //
+            //     return [
+            //         'assets'    => "(assets.id IN ({$assetIds}) OR assets.company_id != {$companyId})",
+            //         'incidents' => "EXISTS (SELECT 1 FROM job_sessions js WHERE js.id = incidents.job_session_id AND js.company_id = {$companyId})",
+            //     ];
+            // },
             'suggestions' => [
                 // Links to existing dashboards or reports. When a user's question
                 // overlaps with a suggestion, the AI will offer it as an alternative

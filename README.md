@@ -758,6 +758,69 @@ $laraGrep = app(LaraGrep::class);
 $safe = $laraGrep->guardAnswer('Raw answer with sensitive details', 'default');
 ```
 
+### Global Filters
+
+Mandatory SQL fragments that must appear in every query touching specific tables. Mirrors the role of Eloquent global scopes — use them to enforce multi-tenant access, soft-delete-style restrictions, or row-level security at the LaraGrep layer.
+
+**Define per context:**
+
+```php
+'contexts' => [
+    'default' => [
+        'global_filters' => function () {
+            $user = auth()->user();
+
+            // Sem user, central, ou rota admin → sem filtro
+            if (!$user || $user->isCentral() || request()->is('api/admin/*')) {
+                return [];
+            }
+
+            $assetIds   = implode(',', array_map('intval', $user->visibleAssetIds()));
+            $companyId  = (int) $user->company_id;
+
+            return [
+                'assets'    => "(assets.id IN ({$assetIds}) OR assets.company_id != {$companyId})",
+                'incidents' => "EXISTS (SELECT 1 FROM job_sessions js WHERE js.id = incidents.job_session_id AND js.company_id = {$companyId})",
+            ];
+        },
+        'tables' => [...],
+    ],
+],
+```
+
+Accepts a `Closure` (evaluated per request), a static `array`, or `null`.
+
+**How it works:**
+
+1. The closure is evaluated by the controller in HTTP context — `auth()`, `request()`, and any per-request state are available.
+2. The resolved map is passed into the system prompt as a `MANDATORY GLOBAL FILTERS` section. The AI is told to copy each fragment exactly into the `WHERE` clause of every query that references the table.
+3. After the AI generates a query, `QueryValidator` checks: for each filtered table actually referenced in the SQL, the corresponding fragment must appear verbatim. If missing, the query is rejected and the AI is forced to retry with a specific error message.
+4. If the AI can't produce a compliant query within `max_iterations`, the request fails — the query never executes without the filter.
+
+**Async safety:**
+
+Closures cannot be serialized into queue jobs. The controller resolves the closure once during HTTP dispatch and passes the resulting array of strings to `ProcessQuestionJob`. The job runs the filters as-is — never re-evaluates the closure in worker context, where `auth()`/`request()` would be unavailable. The same applies to broadcasting and polling — both see the already-filtered result.
+
+**Inlined values, not bindings:**
+
+Fragments must contain literal values, not `?` placeholders. The values come from server-trusted sources (auth, tenant context, IDs from the database), so inlining is safe — but cast IDs to `int` and quote/escape strings before building the fragment.
+
+**Programmatic override:**
+
+```php
+$laraGrep->answerQuestion(
+    question: $question,
+    scope: 'default',
+    globalFilters: ['assets' => '...'],   // overrides the config closure
+);
+```
+
+Pass `null` (default) to use the configured closure. Pass an array (even empty `[]`) to override and disable filters for that call.
+
+**No filters configured?**
+
+If `global_filters` is `null` or returns `[]`, no AI-side prompt changes happen and no validation is added — zero overhead per request.
+
 ### Conversation Persistence
 
 Multi-turn conversations are enabled by default. Previous questions and answers are sent as context for follow-ups.

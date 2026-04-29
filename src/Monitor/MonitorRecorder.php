@@ -25,9 +25,10 @@ class MonitorRecorder
         ?string $conversationId = null,
         string|int|null $userId = null,
         ?Closure $onStep = null,
+        ?array $globalFilters = null,
     ): array {
         return $this->recordExecution(
-            fn () => $this->laraGrep->answerQuestion($question, $scope, $conversationId, $onStep),
+            fn () => $this->laraGrep->answerQuestion($question, $scope, $conversationId, $onStep, $globalFilters),
             $question,
             $scope,
             $conversationId,
@@ -40,9 +41,10 @@ class MonitorRecorder
         array $recipe,
         string|int|null $userId = null,
         ?Closure $onStep = null,
+        ?array $globalFilters = null,
     ): array {
         return $this->recordExecution(
-            fn () => $this->laraGrep->replayRecipe($recipe, $onStep),
+            fn () => $this->laraGrep->replayRecipe($recipe, $onStep, $globalFilters),
             $recipe['question'] ?? '',
             $recipe['scope'] ?? 'default',
             null,
@@ -231,6 +233,7 @@ class MonitorRecorder
                     'tables_total' => $schemaStats['total'] ?? null,
                     'tables_filtered' => $schemaStats['filtered'] ?? null,
                     'debug_queries' => json_encode($answer['debug']['queries'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'metadata' => $this->buildMetadata(),
                 ]);
             } catch (Throwable) {
                 // Monitoring must never break the actual operation
@@ -242,6 +245,38 @@ class MonitorRecorder
         }
 
         return $answer;
+    }
+
+    /**
+     * Snapshot guard activity and active global filters into a JSON payload
+     * that the dashboard can render. Returns null when nothing is worth
+     * recording (no guard ran, no filters active) — keeps the column empty
+     * for the common case.
+     */
+    protected function buildMetadata(): ?string
+    {
+        $guard = $this->laraGrep->getLastGuardInfo();
+        $filters = $this->laraGrep->getLastGlobalFilters();
+
+        $payload = [];
+
+        if (!empty($guard['ran'])) {
+            $payload['guard'] = [
+                'ran' => true,
+                'modified' => (bool) ($guard['modified'] ?? false),
+                'original_summary' => $guard['original_summary'] ?? null,
+            ];
+        }
+
+        if ($filters !== []) {
+            $payload['global_filters'] = $filters;
+        }
+
+        if ($payload === []) {
+            return null;
+        }
+
+        return json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     protected function truncateStepResults(array $steps): array

@@ -4,7 +4,7 @@ namespace LaraGrep\Prompt;
 
 class PromptBuilder
 {
-    public function buildUserPrompt(string $question, bool $hasMultipleConnections = false, string $responseFormat = 'html', int $maxRows = 0): string
+    public function buildUserPrompt(string $question, bool $hasMultipleConnections = false, string $responseFormat = 'html', int $maxRows = 0, bool $hasGlobalFilters = false): string
     {
         $queryExample = $hasMultipleConnections
             ? '{"query": "SELECT ...", "bindings": [], "reason": "Why this query is needed", "connection": "connection_name"}'
@@ -14,6 +14,10 @@ class PromptBuilder
             ? PHP_EOL . '- CRITICAL: Tables are on different database connections (shown as "Connection: ..." in the schema). Connections marked "(primary)" are on the default database — do NOT include a "connection" field for them. For all other connections, you MUST include the "connection" name in the query entry.'
             . PHP_EOL . '- CRITICAL: NEVER combine tables from different connections in a single query — no JOINs, no subqueries, no IN (SELECT ...) clauses across connections. Query each connection separately and combine the results in your final answer.'
             . PHP_EOL . '- When a table specifies an "Engine" (e.g., ClickHouse, PostgreSQL), write SQL compatible with that engine\'s dialect and capabilities.'
+            : '';
+
+        $globalFilterRule = $hasGlobalFilters
+            ? PHP_EOL . '- CRITICAL: Apply every fragment listed under "MANDATORY GLOBAL FILTERS" exactly as written, on every query that references the corresponding table (including subqueries, JOINs, and CTEs). Queries missing a required filter will be rejected and you will be asked to retry.'
             : '';
 
         return implode(PHP_EOL . PHP_EOL, [
@@ -39,7 +43,8 @@ class PromptBuilder
                 'text' => '- Write the summary as plain text only. Do not use HTML tags, Markdown, or any formatting syntax.',
                 default => '- You can use these HTML tags in the summary: table, b, ul, ol, i, td, tr, th, thead, tbody. Do not use markdown.',
             }
-            . $connectionRules,
+            . $connectionRules
+            . $globalFilterRule,
             'Question: ' . $question,
         ]);
     }
@@ -49,12 +54,14 @@ class PromptBuilder
      * @param  string  $userLanguage
      * @param  array|null  $database  ['type' => '...', 'name' => '...']
      * @param  string|null  $customSystemPrompt
+     * @param  array<string, string>  $globalFilters  Map of table => required SQL fragment.
      */
     public function buildSystemPrompt(
         array $tables,
         string $userLanguage = 'en',
         ?array $database = null,
         ?string $customSystemPrompt = null,
+        array $globalFilters = [],
     ): string {
         $metadataSummary = collect($tables)
             ->map(function (array $table) {
@@ -128,6 +135,7 @@ class PromptBuilder
             'User language: ' . $userLanguage,
             'Available schema:',
             $metadataSummary,
+            $this->buildGlobalFiltersSection($globalFilters),
         ]);
 
         $customSystemPrompt = is_string($customSystemPrompt) ? trim($customSystemPrompt) : '';
@@ -140,6 +148,48 @@ class PromptBuilder
     }
 
     /**
+     * Build the MANDATORY GLOBAL FILTERS section appended to the system prompt
+     * when filters are configured for the active context.
+     *
+     * @param  array<string, string>  $globalFilters
+     */
+    protected function buildGlobalFiltersSection(array $globalFilters): ?string
+    {
+        $entries = [];
+
+        foreach ($globalFilters as $table => $fragment) {
+            if (!is_string($table) || !is_string($fragment)) {
+                continue;
+            }
+
+            $table = trim($table);
+            $fragment = trim($fragment);
+
+            if ($table === '' || $fragment === '') {
+                continue;
+            }
+
+            $entries[] = sprintf(
+                "Table `%s` — required filter:\n  %s",
+                $table,
+                $fragment,
+            );
+        }
+
+        if ($entries === []) {
+            return null;
+        }
+
+        return implode(PHP_EOL . PHP_EOL, [
+            '=== MANDATORY GLOBAL FILTERS ===',
+            'The tables below have access/security filters that MUST be present in every query that references them — including subqueries, JOINs, and CTEs. Copy each fragment EXACTLY as written; do not modify whitespace, parentheses, or values. If you omit a required filter, the query will be rejected and you will be asked to retry.',
+            implode(PHP_EOL . PHP_EOL, $entries),
+            'Apply these filters by appending them to the WHERE clause (with AND) in every query whose FROM/JOIN references the listed table.',
+        ]);
+    }
+
+    /**
+     * @param  array<string, string>  $globalFilters
      * @return array<int, array{role: string, content: string}>
      */
     public function buildQueryMessages(
@@ -151,12 +201,13 @@ class PromptBuilder
         array $conversationHistory = [],
         string $responseFormat = 'html',
         int $maxRows = 0,
+        array $globalFilters = [],
     ): array {
         $messages = [];
 
         $messages[] = [
             'role' => 'system',
-            'content' => $this->buildSystemPrompt($tables, $userLanguage, $database, $customSystemPrompt),
+            'content' => $this->buildSystemPrompt($tables, $userLanguage, $database, $customSystemPrompt, $globalFilters),
         ];
 
         foreach ($conversationHistory as $message) {
@@ -181,7 +232,7 @@ class PromptBuilder
             $messages[] = ['role' => $role, 'content' => $content];
         }
 
-        $messages[] = ['role' => 'user', 'content' => $this->buildUserPrompt($question, $this->hasMultipleConnections($tables), $responseFormat, $maxRows)];
+        $messages[] = ['role' => 'user', 'content' => $this->buildUserPrompt($question, $this->hasMultipleConnections($tables), $responseFormat, $maxRows, $globalFilters !== [])];
 
         return $messages;
     }
@@ -201,12 +252,13 @@ class PromptBuilder
         ?string $customSystemPrompt = null,
         string $responseFormat = 'html',
         int $maxRows = 0,
+        array $globalFilters = [],
     ): array {
         $messages = [];
 
         $messages[] = [
             'role' => 'system',
-            'content' => $this->buildSystemPrompt($tables, $userLanguage, $database, $customSystemPrompt),
+            'content' => $this->buildSystemPrompt($tables, $userLanguage, $database, $customSystemPrompt, $globalFilters),
         ];
 
         $recipeContext = collect($previousQueries)
@@ -230,7 +282,7 @@ class PromptBuilder
             ->implode(PHP_EOL . PHP_EOL);
 
         $userContent = implode(PHP_EOL . PHP_EOL, [
-            $this->buildUserPrompt($question, $this->hasMultipleConnections($tables), $responseFormat, $maxRows),
+            $this->buildUserPrompt($question, $this->hasMultipleConnections($tables), $responseFormat, $maxRows, $globalFilters !== []),
             'This question was previously answered using these queries:',
             $recipeContext,
             sprintf(

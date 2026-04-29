@@ -23,6 +23,9 @@ class ProcessQuestionJob implements ShouldQueue
 
     public int $timeout;
 
+    /**
+     * @param  array<string, string>  $globalFilters  Pre-resolved filters from the controller.
+     */
     public function __construct(
         public readonly string $queryId,
         public readonly string $question,
@@ -31,6 +34,7 @@ class ProcessQuestionJob implements ShouldQueue
         public readonly string|int|null $userId,
         public readonly bool $debug,
         public readonly ?string $userLanguage = null,
+        public readonly array $globalFilters = [],
     ) {
         $this->timeout = (int) config('laragrep.timeout', 300);
     }
@@ -59,6 +63,7 @@ class ProcessQuestionJob implements ShouldQueue
                 $this->conversationId,
                 $this->userId,
                 $onStep,
+                $this->globalFilters,
             );
         } else {
             $answer = $service->answerQuestion(
@@ -66,6 +71,7 @@ class ProcessQuestionJob implements ShouldQueue
                 $this->scope,
                 $this->conversationId,
                 $onStep,
+                $this->globalFilters,
             );
         }
 

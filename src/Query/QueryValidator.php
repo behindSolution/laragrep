@@ -10,14 +10,64 @@ class QueryValidator
      * @param  string  $query
      * @param  array<int, string>  $knownTables  Lowercased known table names.
      * @param  int  $maxRows  Maximum allowed LIMIT value (0 = no limit).
+     * @param  array<string, string>  $globalFilters  Map of table => required SQL fragment.
      *
      * @throws RuntimeException
      */
-    public function validate(string $query, array $knownTables, int $maxRows = 0): void
+    public function validate(string $query, array $knownTables, int $maxRows = 0, array $globalFilters = []): void
     {
         $this->assertSelectOnly($query);
         $this->assertTablesExist($query, $knownTables);
         $this->assertLimitWithinBounds($query, $maxRows);
+        $this->assertGlobalFiltersApplied($query, $globalFilters);
+    }
+
+    /**
+     * Ensure that every required global filter is present whenever its table
+     * is referenced in the query. The fragment must appear verbatim — the AI
+     * is instructed to copy it without modification.
+     *
+     * @param  array<string, string>  $globalFilters  Map of table => SQL fragment.
+     */
+    protected function assertGlobalFiltersApplied(string $query, array $globalFilters): void
+    {
+        if ($globalFilters === []) {
+            return;
+        }
+
+        $tablesInQuery = $this->extractTableNames($query);
+
+        if ($tablesInQuery === []) {
+            return;
+        }
+
+        foreach ($globalFilters as $table => $fragment) {
+            if (!is_string($table) || !is_string($fragment)) {
+                continue;
+            }
+
+            $table = strtolower(trim($table));
+            $fragment = trim($fragment);
+
+            if ($table === '' || $fragment === '') {
+                continue;
+            }
+
+            if (!in_array($table, $tablesInQuery, true)) {
+                continue;
+            }
+
+            if (str_contains($query, $fragment)) {
+                continue;
+            }
+
+            throw new RuntimeException(sprintf(
+                'Query references table "%s" but is missing the required global filter. '
+                . 'Append this fragment to the WHERE clause exactly as written: %s',
+                $table,
+                $fragment
+            ));
+        }
     }
 
     protected function assertSelectOnly(string $query): void

@@ -37,6 +37,7 @@ return new class extends Migration
             $table->unsignedSmallInteger('tables_total')->nullable();
             $table->unsignedSmallInteger('tables_filtered')->nullable();
             $table->text('debug_queries');
+            $table->text('metadata')->nullable();
             $table->timestamp('created_at')->nullable();
 
             $table->index('scope');

@@ -120,6 +120,11 @@ class QueryController extends Controller
             }
         }
 
+        // Resolve global filters here, in HTTP context, while auth() / request()
+        // are available. Closures that depend on request state cannot run safely
+        // inside a queue worker, so we hand the resolved array of strings to the job.
+        $globalFilters = $this->service->resolveGlobalFilters($scope);
+
         if (config('laragrep.async.enabled', false)) {
             $queryId = (string) Str::uuid();
             $store = app(AsyncStore::class);
@@ -134,6 +139,7 @@ class QueryController extends Controller
             ProcessQuestionJob::dispatch(
                 $queryId, $question, $scope, $conversationId, $userId, $debug,
                 config('laragrep.user_language'),
+                $globalFilters,
             )->onQueue(config('laragrep.async.queue', 'default'))
              ->onConnection(config('laragrep.async.queue_connection'));
 
@@ -152,12 +158,16 @@ class QueryController extends Controller
                     $scope,
                     $conversationId,
                     $userId,
+                    null,
+                    $globalFilters,
                 );
             } else {
                 $answer = $this->service->answerQuestion(
                     $question,
                     $scope,
                     $conversationId,
+                    null,
+                    $globalFilters,
                 );
             }
         } catch (Throwable) {

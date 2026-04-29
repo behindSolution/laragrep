@@ -20,6 +20,12 @@ class LaraGrep
     protected int $lastPromptTokens = 0;
     protected int $lastCompletionTokens = 0;
 
+    /** @var array{ran: bool, modified: bool, original_summary: ?string} */
+    protected array $lastGuard = ['ran' => false, 'modified' => false, 'original_summary' => null];
+
+    /** @var array<string, string> */
+    protected array $lastGlobalFilters = [];
+
     public function __construct(
         protected AiClientInterface $aiClient,
         protected PromptBuilder $promptBuilder,
@@ -37,9 +43,9 @@ class LaraGrep
         ?string $scope = null,
         ?string $conversationId = null,
         ?Closure $onStep = null,
+        ?array $globalFilters = null,
     ): array {
-        $this->lastPromptTokens = 0;
-        $this->lastCompletionTokens = 0;
+        $this->resetRequestState();
 
         $scopeConfig = $this->resolveScopeConfig($scope);
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
@@ -65,6 +71,12 @@ class LaraGrep
 
         $maxRows = (int) ($this->config['max_rows'] ?? 20);
 
+        $globalFilters = $globalFilters !== null
+            ? $this->normalizeGlobalFilters($globalFilters)
+            : $this->resolveGlobalFilters($scope);
+
+        $this->lastGlobalFilters = $globalFilters;
+
         $messages = $this->promptBuilder->buildQueryMessages(
             question: $question,
             tables: $tables,
@@ -74,9 +86,10 @@ class LaraGrep
             conversationHistory: $history,
             responseFormat: $responseFormat,
             maxRows: $maxRows,
+            globalFilters: $globalFilters,
         );
 
-        $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep, $maxRows);
+        $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep, $maxRows, $globalFilters);
 
         $result['summary'] = $this->runAnswerGuard($result['summary'], $scopeConfig, $userLanguage, $responseFormat);
 
@@ -97,8 +110,7 @@ class LaraGrep
      */
     public function guardAnswer(string $summary, ?string $scope = null): string
     {
-        $this->lastPromptTokens = 0;
-        $this->lastCompletionTokens = 0;
+        $this->resetRequestState();
 
         $scopeConfig = $this->resolveScopeConfig($scope);
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
@@ -148,8 +160,7 @@ class LaraGrep
             return null;
         }
 
-        $this->lastPromptTokens = 0;
-        $this->lastCompletionTokens = 0;
+        $this->resetRequestState();
 
         $resolvedConnection = $this->resolveConnection($scopeConfig['connection'] ?? null);
         $tables = $this->resolveMetadata($scopeConfig);
@@ -199,8 +210,7 @@ class LaraGrep
         array $answers,
         ?string $scope = null,
     ): string {
-        $this->lastPromptTokens = 0;
-        $this->lastCompletionTokens = 0;
+        $this->resetRequestState();
 
         $scopeConfig = $this->resolveScopeConfig($scope);
         $userLanguage = $scopeConfig['user_language'] ?? $this->config['user_language'] ?? 'en';
@@ -256,10 +266,9 @@ class LaraGrep
      *
      * @param  array  $recipe  Recipe from extractRecipe()
      */
-    public function replayRecipe(array $recipe, ?Closure $onStep = null): array
+    public function replayRecipe(array $recipe, ?Closure $onStep = null, ?array $globalFilters = null): array
     {
-        $this->lastPromptTokens = 0;
-        $this->lastCompletionTokens = 0;
+        $this->resetRequestState();
 
         $question = $recipe['question'] ?? '';
         $scope = $recipe['scope'] ?? 'default';
@@ -282,6 +291,12 @@ class LaraGrep
 
         $maxRows = (int) ($this->config['max_rows'] ?? 20);
 
+        $globalFilters = $globalFilters !== null
+            ? $this->normalizeGlobalFilters($globalFilters)
+            : $this->resolveGlobalFilters($scope);
+
+        $this->lastGlobalFilters = $globalFilters;
+
         $messages = $this->promptBuilder->buildReplayMessages(
             question: $question,
             tables: $tables,
@@ -291,9 +306,10 @@ class LaraGrep
             customSystemPrompt: $this->config['system_prompt'] ?? null,
             responseFormat: $responseFormat,
             maxRows: $maxRows,
+            globalFilters: $globalFilters,
         );
 
-        $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep, $maxRows);
+        $result = $this->runAgentLoop($messages, $knownTables, $maxIterations, $userLanguage, $onStep, $maxRows, $globalFilters);
 
         $result['summary'] = $this->runAnswerGuard($result['summary'], $scopeConfig, $userLanguage, $responseFormat);
 
@@ -384,11 +400,21 @@ class LaraGrep
         $this->lastPromptTokens += $aiResponse->promptTokens;
         $this->lastCompletionTokens += $aiResponse->completionTokens;
 
-        return $this->responseParser->parseAnswerGuard($aiResponse->content);
+        $reviewed = $this->responseParser->parseAnswerGuard($aiResponse->content);
+
+        $this->lastGuard = [
+            'ran' => true,
+            'modified' => $reviewed !== $summary,
+            'original_summary' => $summary,
+        ];
+
+        return $reviewed;
     }
 
     /**
      * Run the agent loop: AI decides queries, executes them, iterates until answer.
+     *
+     * @param  array<string, string>  $globalFilters
      */
     protected function runAgentLoop(
         array $messages,
@@ -397,6 +423,7 @@ class LaraGrep
         string $userLanguage,
         ?Closure $onStep = null,
         int $maxRows = 0,
+        array $globalFilters = [],
     ): array {
         $executedSteps = [];
         $debugQueries = [];
@@ -426,7 +453,7 @@ class LaraGrep
                 $entryConnection = $entry['connection'] ?? null;
 
                 try {
-                    $this->queryValidator->validate($entry['query'], $knownTables, $maxRows);
+                    $this->queryValidator->validate($entry['query'], $knownTables, $maxRows, $globalFilters);
                     $execution = $this->queryExecutor->execute($entry['query'], $entry['bindings'], $entryConnection);
                 } catch (\Throwable $e) {
                     $errorMsg = $e->getMessage();
@@ -611,6 +638,61 @@ class LaraGrep
         ));
     }
 
+    /**
+     * Resolve the global filters for a given scope.
+     *
+     * Reads the `global_filters` entry of the active context. Accepts a Closure
+     * (evaluated now), an array (used as-is), or null (no filters). Returns a
+     * map of `table => sql_fragment` with strings normalized.
+     *
+     * Call this from HTTP context (controller) before dispatching to the queue,
+     * since closures may depend on `auth()`/`request()` which are not available
+     * inside queue workers.
+     *
+     * @return array<string, string>
+     */
+    public function resolveGlobalFilters(?string $scope = null): array
+    {
+        $scopeConfig = $this->resolveScopeConfig($scope);
+        $raw = $scopeConfig['global_filters'] ?? null;
+
+        if ($raw instanceof Closure) {
+            $raw = $raw();
+        }
+
+        return $this->normalizeGlobalFilters($raw);
+    }
+
+    /**
+     * @param  mixed  $filters
+     * @return array<string, string>
+     */
+    protected function normalizeGlobalFilters(mixed $filters): array
+    {
+        if (!is_array($filters) || $filters === []) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ($filters as $table => $fragment) {
+            if (!is_string($table) || !is_string($fragment)) {
+                continue;
+            }
+
+            $table = strtolower(trim($table));
+            $fragment = trim($fragment);
+
+            if ($table === '' || $fragment === '') {
+                continue;
+            }
+
+            $normalized[$table] = $fragment;
+        }
+
+        return $normalized;
+    }
+
     protected function resolveScopeConfig(?string $scope): array
     {
         $config = $this->getFreshConfig();
@@ -771,6 +853,30 @@ class LaraGrep
             'prompt_tokens' => $this->lastPromptTokens,
             'completion_tokens' => $this->lastCompletionTokens,
         ];
+    }
+
+    /**
+     * @return array{ran: bool, modified: bool, original_summary: ?string}
+     */
+    public function getLastGuardInfo(): array
+    {
+        return $this->lastGuard;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getLastGlobalFilters(): array
+    {
+        return $this->lastGlobalFilters;
+    }
+
+    protected function resetRequestState(): void
+    {
+        $this->lastPromptTokens = 0;
+        $this->lastCompletionTokens = 0;
+        $this->lastGuard = ['ran' => false, 'modified' => false, 'original_summary' => null];
+        $this->lastGlobalFilters = [];
     }
 
     protected function normalizeId(?string $id): ?string

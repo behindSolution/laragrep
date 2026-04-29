@@ -212,4 +212,146 @@ class QueryValidatorTest extends TestCase
 
         $this->assertSame(['users'], $tables);
     }
+
+    // ── Global filters ───────────────────────────────────────────────
+
+    public function test_global_filter_passes_when_fragment_present(): void
+    {
+        $this->validator->validate(
+            'SELECT * FROM incidents WHERE status = ? AND incidents.company_id = 5',
+            ['incidents'],
+            0,
+            ['incidents' => 'incidents.company_id = 5'],
+        );
+
+        $this->assertTrue(true);
+    }
+
+    public function test_global_filter_passes_when_table_not_in_query(): void
+    {
+        // Filter is configured for `incidents`, but query only touches `users` —
+        // validation should not require the filter.
+        $this->validator->validate(
+            'SELECT COUNT(*) FROM users',
+            ['users', 'incidents'],
+            0,
+            ['incidents' => 'incidents.company_id = 5'],
+        );
+
+        $this->assertTrue(true);
+    }
+
+    public function test_global_filter_rejects_when_fragment_missing(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('missing the required global filter');
+
+        $this->validator->validate(
+            'SELECT * FROM incidents WHERE status = ?',
+            ['incidents'],
+            0,
+            ['incidents' => 'incidents.company_id = 5'],
+        );
+    }
+
+    public function test_global_filter_error_includes_table_and_fragment(): void
+    {
+        try {
+            $this->validator->validate(
+                'SELECT * FROM assets',
+                ['assets'],
+                0,
+                ['assets' => '(assets.id IN (1,2,3) OR assets.company_id != 7)'],
+            );
+
+            $this->fail('Expected RuntimeException for missing global filter.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('assets', $e->getMessage());
+            $this->assertStringContainsString('(assets.id IN (1,2,3) OR assets.company_id != 7)', $e->getMessage());
+        }
+    }
+
+    public function test_global_filter_handles_multiple_tables(): void
+    {
+        $this->validator->validate(
+            'SELECT * FROM incidents i JOIN assets a ON a.id = i.asset_id WHERE i.company_id = 5 AND a.company_id = 5',
+            ['incidents', 'assets'],
+            0,
+            [
+                'incidents' => 'i.company_id = 5',
+                'assets' => 'a.company_id = 5',
+            ],
+        );
+
+        $this->assertTrue(true);
+    }
+
+    public function test_global_filter_rejects_when_only_one_of_many_is_missing(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('assets');
+
+        // incidents filter is present, assets filter is missing
+        $this->validator->validate(
+            'SELECT * FROM incidents i JOIN assets a ON a.id = i.asset_id WHERE i.company_id = 5',
+            ['incidents', 'assets'],
+            0,
+            [
+                'incidents' => 'i.company_id = 5',
+                'assets' => 'a.company_id = 5',
+            ],
+        );
+    }
+
+    public function test_global_filter_empty_map_is_noop(): void
+    {
+        $this->validator->validate(
+            'SELECT * FROM users',
+            ['users'],
+            0,
+            [],
+        );
+
+        $this->assertTrue(true);
+    }
+
+    public function test_global_filter_skips_empty_fragments(): void
+    {
+        // Empty/whitespace fragments are silently ignored, not enforced.
+        $this->validator->validate(
+            'SELECT * FROM incidents',
+            ['incidents'],
+            0,
+            ['incidents' => '   '],
+        );
+
+        $this->assertTrue(true);
+    }
+
+    public function test_global_filter_table_name_is_case_insensitive(): void
+    {
+        // Filter declared as `Incidents` should match query referencing `incidents`.
+        $this->expectException(RuntimeException::class);
+
+        $this->validator->validate(
+            'SELECT * FROM incidents',
+            ['incidents'],
+            0,
+            ['Incidents' => 'incidents.company_id = 5'],
+        );
+    }
+
+    public function test_global_filter_works_with_subquery_table(): void
+    {
+        $sql = 'SELECT (SELECT COUNT(*) FROM incidents WHERE incidents.company_id = 5) as total FROM users';
+
+        $this->validator->validate(
+            $sql,
+            ['users', 'incidents'],
+            0,
+            ['incidents' => 'incidents.company_id = 5'],
+        );
+
+        $this->assertTrue(true);
+    }
 }
