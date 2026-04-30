@@ -73,6 +73,19 @@ class PromptBuilderGlobalFiltersTest extends TestCase
         $this->assertStringContainsString('retry', $prompt);
     }
 
+    public function test_system_prompt_filters_section_forbids_aliases(): void
+    {
+        $prompt = $this->builder->buildSystemPrompt(
+            [['name' => 'policies', 'columns' => []]],
+            'en',
+            null,
+            null,
+            ['policies' => 'policies.company_id = 5'],
+        );
+
+        $this->assertStringContainsString('alias', $prompt);
+    }
+
     public function test_system_prompt_filters_section_skips_blank_entries(): void
     {
         $prompt = $this->builder->buildSystemPrompt(

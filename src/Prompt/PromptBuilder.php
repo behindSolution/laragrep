@@ -182,9 +182,13 @@ class PromptBuilder
 
         return implode(PHP_EOL . PHP_EOL, [
             '=== MANDATORY GLOBAL FILTERS ===',
-            'The tables below have access/security filters that MUST be present in every query that references them — including subqueries, JOINs, and CTEs. Copy each fragment EXACTLY as written; do not modify whitespace, parentheses, or values. If you omit a required filter, the query will be rejected and you will be asked to retry.',
+            'The tables below have access/security filters that MUST be present in every query that references them — including subqueries, JOINs, and CTEs. Copy each fragment EXACTLY as written; do not modify whitespace, parentheses, values, or column qualifiers. If you omit a required filter, the query will be rejected and you will be asked to retry.',
             implode(PHP_EOL . PHP_EOL, $entries),
-            'Apply these filters by appending them to the WHERE clause (with AND) in every query whose FROM/JOIN references the listed table.',
+            implode(PHP_EOL, [
+                'Apply these filters by appending them to the WHERE clause (with AND) in every query whose FROM/JOIN references the listed table.',
+                'CRITICAL: Do NOT alias a filtered table (e.g. `FROM policies p`). Always reference the table by its full name, since the filter fragment uses the full name (e.g. `policies.id`) and an alias makes the query fail validation.',
+                'CRITICAL: Do NOT rewrite the fragment using table aliases. The fragment must appear in the query character-for-character as listed above.',
+            ]),
         ]);
     }
 
