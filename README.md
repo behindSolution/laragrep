@@ -327,6 +327,40 @@ LARAGREP_BASE_URL=http://localhost:11434/v1/chat/completions
 
 Ollama exposes an OpenAI-compatible API, so it works with the `openai` provider. The API key can be any non-empty string. This keeps your data fully local.
 
+### Runtime AI Config (per-request)
+
+The AI provider, API key, model, and fallback can all be swapped at request time via middleware — useful for multi-tenant setups where each tenant brings its own API key (BYOK) or chooses a different model.
+
+```php
+// app/Http/Middleware/ConfigureLaraGrep.php
+public function handle(Request $request, Closure $next)
+{
+    $tenant = tenant();
+
+    config()->set('laragrep.provider', $tenant->ai_provider);   // 'openai' or 'anthropic'
+    config()->set('laragrep.api_key',  $tenant->ai_api_key);
+    config()->set('laragrep.model',    $tenant->ai_model);
+    config()->set('laragrep.user_language', $tenant->locale);
+
+    // Optional fallback per tenant
+    config()->set('laragrep.fallback.provider', $tenant->ai_fallback_provider);
+    config()->set('laragrep.fallback.api_key',  $tenant->ai_fallback_api_key);
+    config()->set('laragrep.fallback.model',    $tenant->ai_fallback_model);
+
+    return $next($request);
+}
+```
+
+Apply it on the LaraGrep routes (or globally) and the new values take effect for that request — both sync and async.
+
+**How it works:**
+
+- The AI client is wrapped in a `RuntimeAiClient` proxy that reads fresh config on every `chat()` call. Hash-based caching keeps the underlying HTTP client warm while the config doesn't change. Mutate config → next call rebuilds.
+- For async, the controller snapshots the current AI config (provider, api_key, model, base_url, max_tokens, timeout, anthropic_version, plus the same `fallback.*` keys) at dispatch time and serializes it into `ProcessQuestionJob`. Inside `handle()`, the job calls `config()->set(...)` for each value before invoking LaraGrep — the worker uses the exact provider/model/key the request was dispatched with, even if the queue runs minutes later.
+- Monitor logs reflect the active provider and model per request (read fresh at record time), so you can audit which tenant called which model.
+
+Same pattern as `user_language` — you don't need a custom controller, just a middleware that mutates `config()`.
+
 ### Fallback Provider
 
 If the primary provider fails (timeout, rate limit, API down), LaraGrep can automatically retry with a fallback:

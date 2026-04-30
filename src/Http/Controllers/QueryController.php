@@ -125,6 +125,12 @@ class QueryController extends Controller
         // inside a queue worker, so we hand the resolved array of strings to the job.
         $globalFilters = $this->service->resolveGlobalFilters($scope);
 
+        // Snapshot AI-related config as it stands NOW (after middleware may have
+        // mutated it for this request — e.g. setting a tenant-specific api_key
+        // or model). The job restores these into config before invoking LaraGrep,
+        // so the worker uses the same provider/model the request was dispatched with.
+        $aiOverrides = $this->collectAiOverrides();
+
         if (config('laragrep.async.enabled', false)) {
             $queryId = (string) Str::uuid();
             $store = app(AsyncStore::class);
@@ -140,6 +146,7 @@ class QueryController extends Controller
                 $queryId, $question, $scope, $conversationId, $userId, $debug,
                 config('laragrep.user_language'),
                 $globalFilters,
+                $aiOverrides,
             )->onQueue(config('laragrep.async.queue', 'default'))
              ->onConnection(config('laragrep.async.queue_connection'));
 
@@ -215,5 +222,41 @@ class QueryController extends Controller
         }
 
         return response()->json($answer);
+    }
+
+    /**
+     * Capture the active AI-related config so the async job can restore it.
+     * Only includes values that are non-null in config — keeps the payload
+     * small and avoids overwriting worker defaults with stray nulls.
+     *
+     * @return array<string, mixed>
+     */
+    protected function collectAiOverrides(): array
+    {
+        $keys = [
+            'provider',
+            'api_key',
+            'model',
+            'base_url',
+            'max_tokens',
+            'timeout',
+            'anthropic_version',
+            'fallback.provider',
+            'fallback.api_key',
+            'fallback.model',
+            'fallback.base_url',
+        ];
+
+        $snapshot = [];
+
+        foreach ($keys as $key) {
+            $value = config('laragrep.' . $key);
+
+            if ($value !== null && $value !== '') {
+                $snapshot[$key] = $value;
+            }
+        }
+
+        return $snapshot;
     }
 }

@@ -14,9 +14,30 @@ class MonitorRecorder
         protected LaraGrep $laraGrep,
         protected MonitorStore $store,
         protected TokenEstimator $tokenEstimator,
-        protected string $model = '',
-        protected string $provider = '',
     ) {
+    }
+
+    /**
+     * Read the active model name from config. Read fresh per call so middleware
+     * overrides (e.g. `config()->set('laragrep.model', $tenantModel)`) are
+     * reflected in the log entry.
+     */
+    protected function currentModel(): ?string
+    {
+        $value = function_exists('config') ? config('laragrep.model') : null;
+
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    /**
+     * Read the active provider from config. Same fresh-per-call rationale as
+     * currentModel().
+     */
+    protected function currentProvider(): ?string
+    {
+        $value = function_exists('config') ? config('laragrep.provider') : null;
+
+        return is_string($value) && $value !== '' ? $value : null;
     }
 
     public function answerQuestion(
@@ -76,8 +97,8 @@ class MonitorRecorder
                     $this->store->record([
                         'question' => mb_substr($question, 0, 1000),
                         'scope' => $scope ?? 'default',
-                        'model' => $this->model ?: null,
-                        'provider' => $this->provider ?: null,
+                        'model' => $this->currentModel(),
+                        'provider' => $this->currentProvider(),
                         'conversation_id' => null,
                         'user_id' => $userId,
                         'status' => 'clarification',
@@ -125,8 +146,8 @@ class MonitorRecorder
                     $this->store->record([
                         'question' => mb_substr($question, 0, 1000),
                         'scope' => $scope ?? 'default',
-                        'model' => $this->model ?: null,
-                        'provider' => $this->provider ?: null,
+                        'model' => $this->currentModel(),
+                        'provider' => $this->currentProvider(),
                         'conversation_id' => null,
                         'user_id' => $userId,
                         'status' => 'suggestion',
@@ -215,8 +236,8 @@ class MonitorRecorder
                 $this->store->record([
                     'question' => mb_substr(($type === 'replay' ? '[Replay] ' : '') . $question, 0, 1000),
                     'scope' => $scope ?? 'default',
-                    'model' => $this->model ?: null,
-                    'provider' => $this->provider ?: null,
+                    'model' => $this->currentModel(),
+                    'provider' => $this->currentProvider(),
                     'conversation_id' => $conversationId,
                     'user_id' => $userId,
                     'status' => $error ? 'error' : 'success',

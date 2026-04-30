@@ -25,6 +25,11 @@ class ProcessQuestionJob implements ShouldQueue
 
     /**
      * @param  array<string, string>  $globalFilters  Pre-resolved filters from the controller.
+     * @param  array<string, mixed>  $aiOverrides  Snapshot of AI-related config (provider,
+     *         api_key, model, base_url, max_tokens, timeout, anthropic_version, fallback.*)
+     *         captured by the controller while in HTTP context. Restored into config inside
+     *         handle() so the worker uses the same provider/model/key the request was
+     *         dispatched with — middleware overrides survive the queue boundary.
      */
     public function __construct(
         public readonly string $queryId,
@@ -35,6 +40,7 @@ class ProcessQuestionJob implements ShouldQueue
         public readonly bool $debug,
         public readonly ?string $userLanguage = null,
         public readonly array $globalFilters = [],
+        public readonly array $aiOverrides = [],
     ) {
         $this->timeout = (int) config('laragrep.timeout', 300);
     }
@@ -43,6 +49,14 @@ class ProcessQuestionJob implements ShouldQueue
     {
         if ($this->userLanguage !== null) {
             config()->set('laragrep.user_language', $this->userLanguage);
+        }
+
+        foreach ($this->aiOverrides as $key => $value) {
+            if (!is_string($key) || $key === '') {
+                continue;
+            }
+
+            config()->set('laragrep.' . $key, $value);
         }
         $store = app(AsyncStore::class);
         $service = app(LaraGrep::class);

@@ -6,6 +6,7 @@ use Illuminate\Support\ServiceProvider;
 use LaraGrep\AiClients\AnthropicClient;
 use LaraGrep\AiClients\FallbackClient;
 use LaraGrep\AiClients\OpenAiClient;
+use LaraGrep\AiClients\RuntimeAiClient;
 use LaraGrep\Async\AsyncStore;
 use LaraGrep\Contracts\AiClientInterface;
 use LaraGrep\Contracts\ConversationStoreInterface;
@@ -32,37 +33,17 @@ class LaraGrepServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/../config/laragrep.php', 'laragrep');
 
         $this->app->singleton(AiClientInterface::class, function ($app) {
-            $config = $app['config']->get('laragrep', []);
-            $timeout = (int) ($config['timeout'] ?? 120);
+            // RuntimeAiClient resolves the actual client lazily, reading
+            // fresh config on every call. This lets middleware override
+            // provider/api_key/model/fallback at request time without
+            // needing to forget the singleton.
+            $factory = function (array $config): AiClientInterface {
+                return $this->buildAiClientFromConfig($config);
+            };
 
-            $primary = $this->buildAiClient(
-                provider: strtolower((string) ($config['provider'] ?? 'openai')),
-                apiKey: (string) ($config['api_key'] ?? ''),
-                model: (string) ($config['model'] ?? ''),
-                baseUrl: $config['base_url'] ?? null,
-                maxTokens: (int) ($config['max_tokens'] ?? 1024),
-                anthropicVersion: (string) ($config['anthropic_version'] ?? '2023-06-01'),
-                timeout: $timeout,
-            );
+            $configResolver = fn () => $app['config']->get('laragrep', []);
 
-            $fallback = $config['fallback'] ?? [];
-            $fallbackProvider = is_array($fallback) ? ($fallback['provider'] ?? null) : null;
-
-            if (!is_string($fallbackProvider) || $fallbackProvider === '') {
-                return $primary;
-            }
-
-            $fallbackClient = $this->buildAiClient(
-                provider: strtolower($fallbackProvider),
-                apiKey: (string) ($fallback['api_key'] ?? ''),
-                model: (string) ($fallback['model'] ?? ''),
-                baseUrl: $fallback['base_url'] ?? null,
-                maxTokens: (int) ($config['max_tokens'] ?? 1024),
-                anthropicVersion: (string) ($config['anthropic_version'] ?? '2023-06-01'),
-                timeout: $timeout,
-            );
-
-            return new FallbackClient([$primary, $fallbackClient]);
+            return new RuntimeAiClient($factory, $configResolver);
         });
 
         $this->app->singleton(MetadataLoaderInterface::class, function ($app) {
@@ -198,14 +179,12 @@ class LaraGrepServiceProvider extends ServiceProvider
                 return null;
             }
 
-            $config = $app['config']->get('laragrep', []);
-
+            // model/provider are read from config at record() time so middleware
+            // overrides apply to the log entry.
             return new MonitorRecorder(
                 $app->make(LaraGrep::class),
                 $store,
                 $app->make(TokenEstimator::class),
-                model: (string) ($config['model'] ?? ''),
-                provider: (string) ($config['provider'] ?? 'openai'),
             );
         });
 
@@ -318,6 +297,45 @@ class LaraGrepServiceProvider extends ServiceProvider
                 . 'Set LARAGREP_ASYNC_QUEUE_CONNECTION to a non-sync connection or change your default QUEUE_CONNECTION.',
             );
         }
+    }
+
+    /**
+     * Build an AiClientInterface (primary, optionally wrapped in FallbackClient)
+     * from a snapshot of the laragrep config array. Used by RuntimeAiClient's
+     * factory closure — runs on every config change.
+     */
+    private function buildAiClientFromConfig(array $config): AiClientInterface
+    {
+        $timeout = (int) ($config['timeout'] ?? 120);
+
+        $primary = $this->buildAiClient(
+            provider: strtolower((string) ($config['provider'] ?? 'openai')),
+            apiKey: (string) ($config['api_key'] ?? ''),
+            model: (string) ($config['model'] ?? ''),
+            baseUrl: $config['base_url'] ?? null,
+            maxTokens: (int) ($config['max_tokens'] ?? 1024),
+            anthropicVersion: (string) ($config['anthropic_version'] ?? '2023-06-01'),
+            timeout: $timeout,
+        );
+
+        $fallback = $config['fallback'] ?? [];
+        $fallbackProvider = is_array($fallback) ? ($fallback['provider'] ?? null) : null;
+
+        if (!is_string($fallbackProvider) || $fallbackProvider === '') {
+            return $primary;
+        }
+
+        $fallbackClient = $this->buildAiClient(
+            provider: strtolower($fallbackProvider),
+            apiKey: (string) ($fallback['api_key'] ?? ''),
+            model: (string) ($fallback['model'] ?? ''),
+            baseUrl: $fallback['base_url'] ?? null,
+            maxTokens: (int) ($config['max_tokens'] ?? 1024),
+            anthropicVersion: (string) ($config['anthropic_version'] ?? '2023-06-01'),
+            timeout: $timeout,
+        );
+
+        return new FallbackClient([$primary, $fallbackClient]);
     }
 
     private function buildAiClient(
